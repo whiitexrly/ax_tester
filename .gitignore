@@ -1,0 +1,11 @@
+.venv/
+venv/
+env/
+.env
+node_modules/
+**/*.ipynb
+results/
+.adk
+__pycache__/
+*.pyc
+*.egg-info/
