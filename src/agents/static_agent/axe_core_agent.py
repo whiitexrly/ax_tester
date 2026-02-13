@@ -1,9 +1,9 @@
 from google.adk.tools.tool_context import ToolContext
 from google.adk.agents.llm_agent import LlmAgent
 
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
-from tools.axe_core_tool import AxeCoreTool
+from tools import AxeCoreTool
 from common import ContextKey, MODEL
 
 def run_axe_core(
@@ -12,7 +12,7 @@ def run_axe_core(
     timeout: int = 30,
     rules: Optional[List[str]] = None,
     headless: bool = True,
-) -> Dict[str, Any]:
+) -> dict:
     """
     Run axe-core on the target URL and store the full report in agent state.
 
@@ -26,7 +26,7 @@ def run_axe_core(
     }).execute(url).to_dict()
     
     tool_context.state[ContextKey.AXE_REPORT] = result
-    return result
+    return {"status": "axe_completed", "state_name": ContextKey.AXE_REPORT, "url_analyzed": url}
 
 axe_agent = LlmAgent(
     name="RunAxeAgent",

@@ -2,34 +2,13 @@ from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import ContextKey, MODEL
+from utils.html_sanitizer import sanitize_html_for_llm
 
 from typing import Dict, Any
 from pathlib import Path
+import yaml
 
 import urllib.request
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-
-INIT_AGENT_INSTRUCTION = """
-    Initialize state and DOM in parallel.
-    Call init_loop_state once.
-    If the user specified a WCAG level set, call set_wcag_level with A, AA, or AAA.
-    Call load_dom_html with the target URL and store dom_html.
-    Return only a short confirmation string.
-    Make sure to call all the functions once with the correct arguments.
-    Moreove, standardize the URL input by stripping whitespace and ensuring it starts with http:// or https://
-"""
-
-def init_loop_state(tool_context: ToolContext) -> Dict[str, Any]:
-    """
-    Initialize loop-related state in the agent context.
-
-    Creates empty placeholders for the LLM loop report and loop notes.
-    """
-    tool_context.state[ContextKey.LOOP_REPORT] = "[]"
-    tool_context.state[ContextKey.LOOP_NOTES] = ""
-    tool_context.state[ContextKey.WCAG_LEVEL] = 2
-    return {"status": "initialized"}
 
 
 def set_wcag_level(tool_context: ToolContext, level: str = 'AA') -> Dict[str, Any]:
@@ -41,12 +20,21 @@ def set_wcag_level(tool_context: ToolContext, level: str = 'AA') -> Dict[str, An
     normalized = level.strip().upper()
     if normalized not in ['A', 'AA', 'AAA']:
         raise ValueError("wcag level must be one of: A, AA, AAA")
-    tool_context.state[ContextKey.WCAG_LEVEL] = len(normalized)
     
-    return {"status": "set", "wcag_level_set": normalized}
+    ROOT_DIR = Path(__file__).resolve().parents[2]
+    with open(ROOT_DIR / "prompts" / "wcag.yml", 'r', encoding='utf-8') as f:
+        wcag_data = yaml.safe_load(f)
+    levels = wcag_data.get('levels') or {}
+    for l in range(len(normalized) + 1, 4):
+        levels.pop('A' * l, None)
+    wcag_data['levels'] = levels
+    
+    tool_context.state[ContextKey.WCAG_PROMPT] = yaml.safe_dump(wcag_data)
+    
+    return {"status": "set", "wcag_level": level}
 
 
-def load_dom_html(url: str, tool_context: ToolContext, timeout: int = 30) -> Dict[str, Any]:
+def fetch_dom_html(url: str, tool_context: ToolContext, timeout: int = 30) -> Dict[str, Any]:
     """
     Fetch the HTML DOM for a URL and store it in agent state.
 
@@ -60,13 +48,15 @@ def load_dom_html(url: str, tool_context: ToolContext, timeout: int = 30) -> Dic
         raw = response.read()
     raw_html = raw.decode("utf-8", errors="replace")
 
-    tool_context.state[ContextKey.DOM_HTML] = raw_html
-    return {"status": "loaded", "bytes": len(raw)}
+    clean_html, _ = sanitize_html_for_llm(raw_html)
+
+    tool_context.state[ContextKey.DOM_HTML] = clean_html
+    return {"status": "fetched", "state_name": ContextKey.DOM_HTML, "url": url}
 
 
 init_agent = LlmAgent(
     name="InitAgent",
     model=MODEL,
-    instruction=INIT_AGENT_INSTRUCTION,
-    tools=[init_loop_state, set_wcag_level, load_dom_html],
+    instruction="Call set_wcag_level and fetch_dom_html to prepare data.",
+    tools=[set_wcag_level, fetch_dom_html],
 )

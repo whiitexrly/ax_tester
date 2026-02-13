@@ -3,73 +3,133 @@ from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.loop_agent import LoopAgent
 
 from typing import Any, Dict
-from pathlib import Path
 
 from common import ContextKey, MODEL
+
+
+def get_finder_instruction(tool_context: ToolContext) -> str:
+    html = tool_context.state.get(ContextKey.DOM_HTML, '')
+    report = tool_context.state.get(ContextKey.LOOP_REPORT, '[]')
+    wcag_prompt = tool_context.state.get(ContextKey.WCAG_PROMPT, '')
+    checker_feedback = tool_context.state.get(ContextKey.LOOP_NOTES, '')
+    
+    instruction = f"""You are an accessibility issue FINDER for WCAG compliance.
+
+WCAG 2.2 Reference:
+{wcag_prompt}
+
+HTML to Analyze:
+{html}
+
+Current Report:
+{report}
+
+{'Checker Feedback: ' + checker_feedback if checker_feedback else ''}
+
+---
+""" + """
+TASK:
+Find NEW accessibility issues in the focused area that are NOT in current report.
+
+Look for:
+1. **Alt text**: Generic ("image"), missing, non-descriptive
+2. **Link text**: "click here", "read more", URLs as text
+3. **Forms**: Missing labels, placeholder-only, unclear error messages
+4. **Headings**: Skipped levels (h1→h3), vague headings, too long
+5. **Semantic**: <div> soup instead of semantic HTML, missing landmarks
+
+OUTPUT:
+Return ONLY JSON array with FULL UPDATED report (existing + new merged).
+
+[
+  {
+    "wcag_rule": "1.1.1 - Non-text Content (Level A)",
+    "description": "Product image has generic alt='image'",
+    "html_snippet": "<img src='product.jpg' alt='image'>",
+    "severity": "serious",
+    "fix": "Change to: alt='Blue cotton t-shirt with V-neck'",
+    "confidence": "high",
+    "user_impact": "Blind users cannot identify product",
+    "element_count": 1
+  }
+]
+
+Severity: critical (blocks functionality) | serious (major impairment) | moderate (inconvenience) | minor (best practice)
+
+IMPORTANT:
+- Do NOT duplicate existing issues
+- Be specific: include element counts, exact locations
+- Return ONLY the JSON array
+"""
+    
+    return instruction
+
+def get_checker_instruction(tool_context: ToolContext) -> str:
+    html = tool_context.state.get(ContextKey.DOM_HTML, '')
+    report = tool_context.state.get(ContextKey.LOOP_REPORT, '[]')
+    iteration = tool_context.state.get(ContextKey.LOOP_ITERATION, 0)
+    
+    instruction = f"""You are a COMPLETENESS CHECKER.
+
+HTML to Analyze:
+{html}
+
+Report:
+{report}
+
+Iteration (1-based): {iteration + 1}"""+"""
+
+SCOPE (target coverage: 85-0%)
+Check these 5 areas and mark each as Covered / Not covered:
+1) Images: alt text reviewed?
+2) Links: link text / accessible name reviewed?
+3) Forms: labels + form structure reviewed?
+4) Headings: heading order/hierarchy reviewed?
+5) Semantics: landmarks / overall HTML structure reviewed?
+
+DECISION
+Call exit_loop() only if:
+- At least 3 iterations have completed or no more issues are found in current iteration
+- Coverage ≥ 85% (at least 4 of 5 areas covered)
+- No clear gaps (e.g., zero form review at all)
+
+Otherwise, if a category is clearly missing:
+- Return: "Missing: <category>"
+"""
+    return instruction
+
 
 def exit_loop(tool_context: ToolContext) -> Dict[str, Any]:
     """
     Signal the loop agent to stop iterating.
     """
-    tool_context.actions.end_of_agent = True
+    iteration = tool_context.state.get(ContextKey.LOOP_ITERATION, 0)
+
+    # if iteration < 3:
+        # return {"status": "continue", "iteration": iteration, "min_iterations": 3}
+
+    tool_context.actions.escalate = True
     tool_context.actions.skip_summarization = True
-    return {"status": "complete"}
+    return {"status": "complete", "iteration": iteration}
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-WCAG_PROMPT_PATH = REPO_ROOT / "prompts" / "wcag.yml"
-WCAG_PROMPT_CONTENT = WCAG_PROMPT_PATH.read_text(encoding="utf-8")
-
-LOOP_FINDER_AGENT_INSTRUCTION = f"""
-    You are the loop auditor. Analyze dom_html and loop_report in toolcontext 
-    to find all possible accessibility issues based on WCAG 2.2 criteria.
-    Here are the WCAG criteria and common issue types to check for:
-    \n{WCAG_PROMPT_CONTENT}\n
-    Return ONLY a JSON array representing the UPDATED FULL report 
-    (merge existing + new). Each item must include: wcag_rule 
-    (SC id + title + level), description (include user impact and fix), 
-    html (evidence snippet), severity (critical|serious|moderate|minor). 
-    Do not include criteria outside the selected level set.
-"""
-
-LOOP_COMPLETENESS_INSTRUCTION = """
-    Assess whether loop_report covers all major accessibility issues inferable from dom_html.
-
-    Check coverage of all WCAG criteria relevant to the selected level set, and common issues like missing alt text, link text, form labels, heading structure, etc.
-
-    Decision criteria:
-    - If significant gaps remain: return "Missing: [specific category]"
-
-    Examples of when to exit:
-    - "All major element types covered, edge cases may remain" → exit_loop()
-    - "Images, links, headings, forms all analyzed" → exit_loop()
-
-    Examples of when to continue:
-    - "Missing: form input label analysis"
-    - "Missing: link text review in footer section"
-    - "Missing: heading hierarchy validation"
-
-    Return ONLY one of:
-    1. Call exit_loop() if complete
-    2. Single sentence starting with "Missing:" if incomplete
-"""
 
 loop_finder_agent = LlmAgent(
     name="LoopFinderAgent",
     model=MODEL,
-    instruction=LOOP_FINDER_AGENT_INSTRUCTION,
+    instruction=get_finder_instruction,
     output_key=ContextKey.LOOP_REPORT,
 )
 
-loop_completeness_agent = LlmAgent(
+loop_checker_agent = LlmAgent(
     name="LoopCompletenessAgent",
     model=MODEL,
-    instruction=LOOP_COMPLETENESS_INSTRUCTION,
+    instruction=get_checker_instruction,
     tools=[exit_loop],
     output_key=ContextKey.LOOP_NOTES,
 )
 
 loop_agent = LoopAgent(
     name="AccessibilityLoopAgent",
-    sub_agents=[loop_finder_agent, loop_completeness_agent],
+    sub_agents=[loop_finder_agent, loop_checker_agent],
     max_iterations=5,
 )
