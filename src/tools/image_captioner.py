@@ -2,15 +2,14 @@ import base64
 import json
 import logging
 import mimetypes
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from urllib.request import Request, urlopen
 
 import cairosvg
 
+from common import MODEL_NAME
 from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
 from utils.llm_helper import call_llm
-from common import MODEL_NAME
-
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ DEFAULT_PROMPT = """
     Do not add extra keys or commentary.
     Use valid JSON with double quotes.
     The index must match the number shown in the input label "Image {index}".
-    
+
     Example output:
     [
         {"index": 0, "caption": "Red bicycle leaning against a brick wall"},
@@ -34,11 +33,9 @@ DEFAULT_PROMPT = """
 
 
 class ImageCaptioner(Tool):
-    """
-    Generate image captions using an LLM. Downloads images and sends them to the model.
-    """
+    """Generate image captions using an LLM. Downloads images and sends them to the model."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         self.model = self.config.get("model", MODEL_NAME)
         self.temperature = self.config.get("temperature", 0.3)
@@ -47,8 +44,10 @@ class ImageCaptioner(Tool):
         self.download_timeout = self.config.get("download_timeout", 15)
         self.max_image_bytes = self.config.get("max_image_bytes", 5_000_000)
 
-    def execute(self, images_input: List[Dict], **kwargs) -> ToolResult:
-        logger.info(f"Generating captions for {len(images_input)} images with model={self.model}, temperature={self.temperature}, max_images_per_batch={self.max_images_per_batch}, max_prompt_chars={self.max_prompt_chars}")
+    def execute(self, images_input: list[dict], **kwargs) -> ToolResult:
+        logger.info(
+            f"Generating captions for {len(images_input)} images with model={self.model}, temperature={self.temperature}, max_images_per_batch={self.max_images_per_batch}, max_prompt_chars={self.max_prompt_chars}"
+        )
 
         try:
             page_url = kwargs.get("page_url", "")
@@ -62,7 +61,7 @@ class ImageCaptioner(Tool):
             prepared, skipped = self._prepare_images(images_input)
             batches = self._batch_images(prepared, max_images_per_batch, max_prompt_chars)
 
-            captions: List[Dict[str, Any]] = []
+            captions: list[dict[str, Any]] = []
             for batch in batches:
                 captions.extend(self._caption_batch(batch))
 
@@ -91,7 +90,7 @@ class ImageCaptioner(Tool):
                 metadata={"url": page_url},
             )
 
-    def _prepare_images(self, images: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def _prepare_images(self, images: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         prepared = []
         skipped = []
         for i, img in enumerate(images):
@@ -102,19 +101,21 @@ class ImageCaptioner(Tool):
             try:
                 data, mime = self._download_image(url)
                 b64 = base64.b64encode(data).decode("ascii")
-                prepared.append({
-                    "index": i,
-                    "url": url,
-                    "alt_text": img.get("alt_text"),
-                    "source_selector": img.get("source_selector"),
-                    "mime": mime,
-                    "b64": b64,
-                })
+                prepared.append(
+                    {
+                        "index": i,
+                        "url": url,
+                        "alt_text": img.get("alt_text"),
+                        "source_selector": img.get("source_selector"),
+                        "mime": mime,
+                        "b64": b64,
+                    }
+                )
             except Exception as e:
                 skipped.append({"url": url, "reason": str(e)})
         return prepared, skipped
 
-    def _download_image(self, url: str) -> Tuple[bytes, str]:
+    def _download_image(self, url: str) -> tuple[bytes, str]:
         req = Request(url, headers={"User-Agent": "ax-tester/1.0"})
         with urlopen(req, timeout=self.download_timeout) as resp:
             content_type = resp.headers.get("Content-Type", "")
@@ -143,12 +144,12 @@ class ImageCaptioner(Tool):
 
     def _batch_images(
         self,
-        images: List[Dict[str, Any]],
+        images: list[dict[str, Any]],
         max_images_per_batch: int,
         max_prompt_chars: int,
-    ) -> List[List[Dict[str, Any]]]:
-        batches: List[List[Dict[str, Any]]] = []
-        current: List[Dict[str, Any]] = []
+    ) -> list[list[dict[str, Any]]]:
+        batches: list[list[dict[str, Any]]] = []
+        current: list[dict[str, Any]] = []
         base_prompt_len = len(DEFAULT_PROMPT)
         current_len = base_prompt_len
 
@@ -168,51 +169,55 @@ class ImageCaptioner(Tool):
 
         return batches
 
-    def _estimate_image_prompt_len(self, img: Dict[str, Any]) -> int:
+    def _estimate_image_prompt_len(self, img: dict[str, Any]) -> int:
         alt = img.get("alt_text") or ""
         return len(img.get("b64", "")) + len(alt) + 200
 
-    def _caption_batch(self, batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _caption_batch(self, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
         messages = self._build_messages(batch)
         response_text = call_llm(self.model, self.temperature, messages)
         return self._parse_captions(response_text, batch)
 
-    def _build_messages(self, batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        content: List[Dict[str, Any]] = []
-        content.append({
-            "type": "text",
-            "text": DEFAULT_PROMPT.strip(),
-        })
+    def _build_messages(self, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        content: list[dict[str, Any]] = []
+        content.append(
+            {
+                "type": "text",
+                "text": DEFAULT_PROMPT.strip(),
+            }
+        )
 
         for img in batch:
             label = f"Image {img['index']} | url: {img['url']}"
             content.append({"type": "text", "text": label})
-            content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:{img['mime']};base64,{img['b64']}"
-                },
-            })
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{img['mime']};base64,{img['b64']}"},
+                }
+            )
 
         return [{"role": "user", "content": content}]
 
-    def _parse_captions(self, text: str, batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _parse_captions(self, text: str, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
         try:
             parsed = json.loads(text)
         except Exception:
             parsed = None
-        
+
         if isinstance(parsed, list):
-            normalized: List[Dict[str, Any]] = []
+            normalized: list[dict[str, Any]] = []
             for item in parsed:
                 if not isinstance(item, dict):
                     continue
                 if "index" not in item or "caption" not in item:
                     continue
-                normalized.append({
-                    "index": item.get("index"),
-                    "caption": item.get("caption"),
-                })
+                normalized.append(
+                    {
+                        "index": item.get("index"),
+                        "caption": item.get("caption"),
+                    }
+                )
             if normalized:
                 return normalized
 
@@ -223,22 +228,27 @@ class ImageCaptioner(Tool):
                 "caption": img.get("alt_text") or "",
             }
             for img in batch
-        ]        
+        ]
 
-    def _merge_with_images(self, images: List[Dict[str, Any]], captions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _merge_with_images(
+        self, images: list[dict[str, Any]], captions: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         merged = []
         for caption_obj in captions:
             idx = caption_obj.get("index")
-            if idx < 0 or idx >= len(images): continue
+            if idx < 0 or idx >= len(images):
+                continue
             img = images[idx]
-            merged.append({
-                "index": idx,
-                "type": img.get("type"),
-                "url": img.get("url"),
-                "alt_text": img.get("alt_text"),
-                "caption": caption_obj.get("caption"),
-                "source_selector": img.get("source_selector"),
-            })
+            merged.append(
+                {
+                    "index": idx,
+                    "type": img.get("type"),
+                    "url": img.get("url"),
+                    "alt_text": img.get("alt_text"),
+                    "caption": caption_obj.get("caption"),
+                    "source_selector": img.get("source_selector"),
+                }
+            )
         return merged
 
 
@@ -247,7 +257,7 @@ if __name__ == "__main__":
     import sys
 
     logging.basicConfig(level=logging.INFO)
-    
+
     # single test
     page_url = "https://shop.reply.com"
     images = [
@@ -262,18 +272,18 @@ if __name__ == "__main__":
     result = ImageCaptioner().execute(images, page_url=page_url).data
     print(f"\n{result}")
     print(json.dumps(result["images"], indent=2))
-    print('\n\n')
+    print("\n\n")
 
     # integration test with image extractor
-    if len(sys.argv) < 2:
-        # url = "https://apple.com"
-        url = "https://shop.reply.com"
-    else: url = sys.argv[1]
-    
+
+    # default_url = "https://apple.com"
+    default_url = "https://shop.reply.com"
+    url = "https://shop.reply.com" if len(sys.argv) < 2 else sys.argv[1]
+
     from tools.image_extractor import ImageExtractor
 
     extracted = ImageExtractor().execute(url).data
     print(f"Extracted {len(extracted['images'])} images")
-    result = ImageCaptioner().execute(extracted['images'], page_url=extracted.get('page_url', ''))
+    result = ImageCaptioner().execute(extracted["images"], page_url=extracted.get("page_url", ""))
 
     print(json.dumps(result.data, indent=2))

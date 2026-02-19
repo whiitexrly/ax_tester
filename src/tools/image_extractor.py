@@ -1,7 +1,8 @@
-import re
 import asyncio
 import logging
+import re
 import threading
+
 from playwright.async_api import async_playwright
 
 from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
@@ -150,10 +151,9 @@ JS_COLLECT = r"""
 }
 """
 
+
 class ImageExtractor(Tool):
-    """
-    Extract images and image-like resources from a webpage using Playwright.
-    """
+    """Extract images and image-like resources from a webpage using Playwright."""
 
     def __init__(self, config=None):
         super().__init__(config)
@@ -163,7 +163,9 @@ class ImageExtractor(Tool):
         self.timeout = self.config.get("timeout", 30)
 
     def execute(self, url: str, **kwargs) -> ToolResult:
-        logger.info(f"Extracting images from {url} with wait_ms={self.wait_ms}, headless={self.headless}, wait_for={self.wait_for}, timeout={self.timeout}")
+        logger.info(
+            f"Extracting images from {url} with wait_ms={self.wait_ms}, headless={self.headless}, wait_for={self.wait_for}, timeout={self.timeout}"
+        )
 
         try:
             url = self.validate_url(url)
@@ -171,9 +173,7 @@ class ImageExtractor(Tool):
             wait_ms = kwargs.get("wait_ms", self.wait_ms)
             timeout = kwargs.get("timeout", self.timeout)
 
-            result = self._run_async(
-                self._extract_images_async(url, wait_ms, timeout)
-            )
+            result = self._run_async(self._extract_images_async(url, wait_ms, timeout))
 
             return ToolResult(
                 tool_name="image-extractor",
@@ -195,9 +195,7 @@ class ImageExtractor(Tool):
             )
 
     def _run_async(self, coro):
-        """
-        Run an async coroutine safely from sync code, even if an event loop exists.
-        """
+        """Run an async coroutine safely from sync code, even if an event loop exists."""
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -209,8 +207,8 @@ class ImageExtractor(Tool):
         def _runner():
             try:
                 result_holder["value"] = asyncio.run(coro)
-            except Exception as exc:  # pragma: no cover - thread boundary
-                error_holder["error"] = exc
+            except Exception as e:
+                error_holder["error"] = e
 
         thread = threading.Thread(target=_runner, daemon=True)
         thread.start()
@@ -241,7 +239,7 @@ class ImageExtractor(Tool):
                     url_raw = item.get("url")
                     if not url_raw:
                         continue
-                    if not 'https://' in url_raw and not 'http://' in url_raw:
+                    if "https://" not in url_raw and "http://" not in url_raw:
                         continue
                     if item["type"].startswith("css-") and isinstance(url_raw, str):
                         extracted = self._extract_url(url_raw)
@@ -252,22 +250,24 @@ class ImageExtractor(Tool):
                     if url in (None, "", "about:blank"):
                         continue
 
-                    out.append({
-                        "type": item.get("type"),
-                        "url": url,
-                        "alt_text": item.get("alt_text"),
-                        "source_selector": item.get("source_selector")
-                    })
+                    out.append(
+                        {
+                            "type": item.get("type"),
+                            "url": url,
+                            "alt_text": item.get("alt_text"),
+                            "source_selector": item.get("source_selector"),
+                        }
+                    )
 
             except Exception as e:
                 logger.exception(f"Playwright execution error for {page_url}")
-                raise ToolExecutionError(f"Playwright error: {str(e)}")
+                raise ToolExecutionError(f"Playwright error: {e!s}") from e
 
-            finally: # close browser
+            finally:  # close browser
                 if browser:
                     try:
                         await browser.close()
-                    except:
+                    except Exception:
                         pass
 
         # deduplication
@@ -280,27 +280,28 @@ class ImageExtractor(Tool):
             "page_url": page_url,
             "images": list(dedup.values()),
         }
-    
+
     def _extract_url(self, css_value: str):
-        if not css_value: return None
+        if not css_value:
+            return None
         m = URL_RE.search(css_value)
         return m.group(1) if m else None
 
 
 # sample usage for testing/debugging
 if __name__ == "__main__":
-    import json, sys
+    import json
+    import sys
 
     logging.basicConfig(level=logging.INFO)
-    
-    if len(sys.argv) < 2:
-        # url = "https://apple.com"
-        url = "https://shop.reply.com"
-    else: url = sys.argv[1]
+
+    # default = "https://apple.com"
+    default_url = "https://shop.reply.com"
+    url = default_url if len(sys.argv) < 2 else sys.argv[1]
 
     result = ImageExtractor().execute(url).data
 
-    assert type(result) == dict, f"Expected dict, got {type(result)}"
-    assert type(result['images']) == list, f"Expected list, got {type(result['images'])}"
-    assert type(result['images'][0]) == dict, f"Expected dict, got {type(result['images'][0])}"
+    assert type(result) is dict, f"Expected dict, got {type(result)}"
+    assert type(result["images"]) is list, f"Expected list, got {type(result['images'])}"
+    assert type(result["images"][0]) is dict, f"Expected dict, got {type(result['images'][0])}"
     print(json.dumps(result, indent=2, ensure_ascii=False))

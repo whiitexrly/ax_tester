@@ -10,6 +10,7 @@ dependencies = [
   "playwright==1.58.0",
   "beautifulsoup4==4.14.3",
   "cairosvg==2.8.2",
+  "ruff==0.15.1"
 ]
 
 [build-system]
@@ -22,3 +23,25 @@ package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["agents*", "common*", "tools*", "utils*", "schemas*"]
+
+[tool.ruff]
+line-length = 113
+indent-width = 4
+target-version = "py312"
+exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "W", "UP", "C4", "A"]  # E/F = pycodestyle+pyflakes, I = import sorting (isort)
+
+ignore = [
+  "E203", # whitespace before ':' (conflicts with some formatters; safe to ignore)
+  "E501", # line length handled by ruff format
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+docstring-code-line-length = 113

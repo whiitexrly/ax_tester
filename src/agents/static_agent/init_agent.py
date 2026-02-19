@@ -1,41 +1,39 @@
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+import yaml
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
-from common import ContextKey, MODEL
+from common import MODEL, ContextKey
 from utils.html_sanitizer import sanitize_html_for_llm
 
-import yaml
-from typing import Dict, Any
-from pathlib import Path
-import urllib.request
 
-
-def set_wcag_level(tool_context: ToolContext, level: str = 'AA') -> Dict[str, Any]:
-    """
-    Set the active WCAG level set for the loop audit.
+def set_wcag_level(tool_context: ToolContext, level: str = "AA") -> dict[str, Any]:
+    """Set the active WCAG level set for the loop audit.
 
     Accepts: A (Level A only), AA (A + AA), AAA (A + AA + AAA).
     """
     normalized = level.strip().upper()
-    if normalized not in ['A', 'AA', 'AAA']:
+    if normalized not in ["A", "AA", "AAA"]:
         raise ValueError("wcag level must be one of: A, AA, AAA")
-    
+
     ROOT_DIR = Path(__file__).resolve().parents[2]
-    with open(ROOT_DIR / "prompts" / "wcag.yml", 'r', encoding='utf-8') as f:
+    with open(ROOT_DIR / "prompts" / "wcag.yml", encoding="utf-8") as f:
         wcag_data = yaml.safe_load(f)
-    levels = wcag_data.get('levels') or {}
-    for l in range(len(normalized) + 1, 4):
-        levels.pop('A' * l, None)
-    wcag_data['levels'] = levels
-    
+    levels = wcag_data.get("levels") or {}
+    for level in range(len(normalized) + 1, 4):
+        levels.pop("A" * level, None)
+    wcag_data["levels"] = levels
+
     tool_context.state[ContextKey.WCAG_PROMPT] = yaml.safe_dump(wcag_data)
-    
+
     return {"status": "set", "wcag_level": level}
 
 
-def fetch_dom_html(url: str, tool_context: ToolContext, timeout: int = 30) -> Dict[str, Any]:
-    """
-    Fetch the HTML DOM for a URL and store it in agent state.
+def fetch_dom_html(url: str, tool_context: ToolContext, timeout: int = 30) -> dict[str, Any]:
+    """Fetch the HTML DOM for a URL and store it in agent state.
 
     Returns a small status payload with the number of bytes loaded.
     """

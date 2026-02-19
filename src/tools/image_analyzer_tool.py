@@ -1,14 +1,13 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
-from tools.image_extractor import ImageExtractor
-from tools.image_captioner import ImageCaptioner
-from utils.llm_helper import call_llm
 from schemas import Issue
-
+from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
+from tools.image_captioner import ImageCaptioner
+from tools.image_extractor import ImageExtractor
+from utils.llm_helper import call_llm
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +29,12 @@ SIMILARITY_PROMPT = """
 
 
 class ImageAnalyzerTool(Tool):
-    """
-    Orchestrates image extraction and captioning.
+    """Orchestrates image extraction and captioning.
     Runs ImageExtractor first, then ImageCaptioner on the extracted images,
     then compares alt text vs caption with an LLM.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         extractor_config = self.config.get("extractor", {})
         captioner_config = self.config.get("captioner", {})
@@ -47,8 +45,10 @@ class ImageAnalyzerTool(Tool):
         self.model = self.captioner.model
 
     def execute(self, url: str, **kwargs) -> ToolResult:
-        logger.info(f"Analyzing images on {url} with extractor_config={self.extractor.config}, captioner_config={self.captioner.config}, temperature={self.temperature}, max_items_per_batch={self.max_items_per_batch}")
-        
+        logger.info(
+            f"Analyzing images on {url} with extractor_config={self.extractor.config}, captioner_config={self.captioner.config}, temperature={self.temperature}, max_items_per_batch={self.max_items_per_batch}"
+        )
+
         try:
             extractor_kwargs = kwargs.get("extractor_kwargs", {})
             captioner_kwargs = kwargs.get("captioner_kwargs", {})
@@ -82,14 +82,16 @@ class ImageAnalyzerTool(Tool):
             logger.info(f"Analyzing similarity of alt text and captions for {len(captioned_images)} images")
             similarity = self._analyze_similarity(captioned_images)
 
-            issue_list: List[Dict[str, Any]] = []
+            issue_list: list[dict[str, Any]] = []
             for idx, sim in enumerate(similarity):
                 img = captioned_images[idx]
                 if not sim:
                     issue = Issue(
                         id=f"image-alt-mismatch-{idx}",
                         wcag_rule="1.1.1 - Non-text Content (Level A)",
-                        description="Missing alt text" if not img.get("alt_text") else "Alt text and caption do not match for image",
+                        description="Missing alt text"
+                        if not img.get("alt_text")
+                        else "Alt text and caption do not match for image",
                         html_snippet=img.get("source_selector") or "",
                         severity="critical",
                         confidence="high",
@@ -122,51 +124,56 @@ class ImageAnalyzerTool(Tool):
                 metadata={"url": url},
             )
 
-    def _analyze_similarity(self, images: List[Dict[str, Any]]) -> List[bool]:
+    def _analyze_similarity(self, images: list[dict[str, Any]]) -> list[bool]:
         items = []
         for i, img in enumerate(images):
             idx = img.get("index", i)
-            items.append({
-                "index": idx,
-                "alt_text": img.get("alt_text") or "",
-                "caption": img.get("caption") or "",
-            })
+            items.append(
+                {
+                    "index": idx,
+                    "alt_text": img.get("alt_text") or "",
+                    "caption": img.get("caption") or "",
+                }
+            )
 
         # extract batch analysis
         batches = self._batch_items(items, self.max_items_per_batch)
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for batch in batches:
             results.extend(self._analyze_batch(batch))
 
         by_index = {r.get("index"): r.get("similar") for r in results if isinstance(r, dict)}
-        out: List[bool] = []
+        out: list[bool] = []
         for item in items:
             val = by_index.get(item.get("index"))
             out.append(bool(val) if val is not None else False)
         return out
 
-    def _batch_items(self, items: List[Dict[str, Any]], size: int) -> List[List[Dict[str, Any]]]:
-        if size <= 0: return [items]
-        return [items[i:i + size] for i in range(0, len(items), size)]
+    def _batch_items(self, items: list[dict[str, Any]], size: int) -> list[list[dict[str, Any]]]:
+        if size <= 0:
+            return [items]
+        return [items[i : i + size] for i in range(0, len(items), size)]
 
-    def _analyze_batch(self, batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _analyze_batch(self, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
         messages = self._build_similarity_messages(batch)
         response_text = call_llm(self.model, self.temperature, messages)
         return self._parse_similarity(response_text)
 
-    def _build_similarity_messages(self, batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        content: List[Dict[str, Any]] = [{"type": "text", "text": SIMILARITY_PROMPT.strip()}]
+    def _build_similarity_messages(self, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        content: list[dict[str, Any]] = [{"type": "text", "text": SIMILARITY_PROMPT.strip()}]
         for item in batch:
             idx = item.get("index")
             alt_text = item.get("alt_text") or ""
             caption = item.get("caption") or ""
-            content.append({
-                "type": "text",
-                "text": f"Image {idx}\nAlt text: {alt_text}\nCaption: {caption}",
-            })
+            content.append(
+                {
+                    "type": "text",
+                    "text": f"Image {idx}\nAlt text: {alt_text}\nCaption: {caption}",
+                }
+            )
         return [{"role": "user", "content": content}]
 
-    def _parse_similarity(self, text: str) -> List[Dict[str, Any]]:
+    def _parse_similarity(self, text: str) -> list[dict[str, Any]]:
         try:
             parsed = json.loads(text)
         except Exception:
@@ -178,23 +185,24 @@ class ImageAnalyzerTool(Tool):
             except Exception:
                 return []
         if isinstance(parsed, list):
-            normalized: List[Dict[str, Any]] = []
+            normalized: list[dict[str, Any]] = []
             for item in parsed:
                 if not isinstance(item, dict):
                     continue
                 if "index" not in item or "similar" not in item:
                     continue
-                normalized.append({
-                    "index": item.get("index"),
-                    "similar": bool(item.get("similar")),
-                })
+                normalized.append(
+                    {
+                        "index": item.get("index"),
+                        "similar": bool(item.get("similar")),
+                    }
+                )
             if normalized:
                 return normalized
         return []
 
 
 if __name__ == "__main__":
-
     url = "https://shop.reply.com"
     # url = "https://apple.com"
 

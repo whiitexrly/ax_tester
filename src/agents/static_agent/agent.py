@@ -1,16 +1,15 @@
+import logging
+
 from google.adk.agents import SequentialAgent
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.parallel_agent import ParallelAgent
 from google.adk.tools.tool_context import ToolContext
 
 from agents.static_agent.axe_core_agent import axe_agent
-from agents.static_agent.llm_finder_agent import loop_agent
 from agents.static_agent.init_agent import init_agent
-
-import logging
-
+from agents.static_agent.llm_finder_agent import loop_agent
+from common import MODEL, ContextKey
 from schemas import StaticReport
-from common import ContextKey, MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -18,14 +17,15 @@ logger = logging.getLogger(__name__)
 def get_merge_agent_instruction(tool_context: ToolContext) -> str:
     import json
 
-    loop_report = tool_context.state.get(ContextKey.LOOP_REPORT, '[]')
+    loop_report = tool_context.state.get(ContextKey.LOOP_REPORT, "[]")
     axe_report = tool_context.state.get(ContextKey.AXE_REPORT, {})
     axe_issue_list = []
     if isinstance(axe_report, dict):
         axe_issue_list = axe_report.get("data", {}).get("issue_list", [])
     axe_report_json = json.dumps(axe_issue_list, ensure_ascii=True)
 
-    return f"""
+    return (
+        f"""
         You are a REPORT MERGER tasked with combining two accessibility issue reports into one comprehensive report.
         Merge axe_report_issue_list and loop_report into a comprehensive unified report.
         Note that axe_report_issue_list is pre-normalized into issue_list schema.
@@ -36,7 +36,8 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
 
         loop_report:
         {loop_report}
-        """ + """
+        """
+        + """
 
         Merging rules:
         1. De-duplicate by WCAG rule + similar description
@@ -55,13 +56,14 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
         Return ONLY the JSON object, no other text.
         Keep html_snippet concise and valid JSON strings.
     """
+    )
+
 
 axe_llm_agent = ParallelAgent(
     name="AxeAndLLMAgent",
     sub_agents=[axe_agent, loop_agent],
     description=(
-        "Run axe-core and the LLM loop audit. "
-        "Wait for both to complete, then return a brief confirmation."
+        "Run axe-core and the LLM loop audit. Wait for both to complete, then return a brief confirmation."
     ),
 )
 

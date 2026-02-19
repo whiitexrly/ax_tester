@@ -1,11 +1,10 @@
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
-from common import ContextKey, MODEL
+from common import MODEL, ContextKey
 from schemas import ImageAnalyzerReport
 from tools import ImageAnalyzerTool
 from tools.base import ToolResult
-
 
 IMAGE_ANALYZER_INSTRUCTIONS = """
     Run the tool analyze_image with a URL to extract images and alt text from the page,
@@ -16,9 +15,9 @@ IMAGE_ANALYZER_INSTRUCTIONS = """
     Return a brief confirmation message indicating how many issues were found.
 """
 
+
 def analyze_images_in_webpage(tool_context: ToolContext, url: str) -> dict:
-    """
-    Analyze images on the given URL for alt text issues and store results in tool_context.state.
+    """Analyze images on the given URL for alt text issues and store results in tool_context.state.
 
     Args:
         tool_context (ToolContext): The context for the tool execution, used to store results.
@@ -26,6 +25,7 @@ def analyze_images_in_webpage(tool_context: ToolContext, url: str) -> dict:
 
     Returns:
         dict: A confirmation message indicating the number of images analyzed and issues found.
+
     """
     raw: ToolResult = ImageAnalyzerTool().execute(url)
     validated = ImageAnalyzerReport.model_validate(raw.data)
@@ -33,9 +33,9 @@ def analyze_images_in_webpage(tool_context: ToolContext, url: str) -> dict:
     result["data"] = validated.model_dump()
     tool_context.state[ContextKey.IMAGE_ANALYZER_REPORT] = result
     return {
-        "status": "success" if result['status'] == "success" else "failure",
+        "status": "success" if result["status"] == "success" else "failure",
         "message": f"Analyzed {len(result['data'].get('issue_list', []))} image issues on {url}.",
-        "state_key": ContextKey.IMAGE_ANALYZER_REPORT
+        "state_key": ContextKey.IMAGE_ANALYZER_REPORT,
     }
 
 

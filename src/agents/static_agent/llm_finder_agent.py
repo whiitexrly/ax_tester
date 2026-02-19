@@ -1,20 +1,21 @@
-from google.adk.tools.tool_context import ToolContext
+from typing import Any
+
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.loop_agent import LoopAgent
+from google.adk.tools.tool_context import ToolContext
 
-from typing import Any, Dict
-
-from common import ContextKey, MODEL
+from common import MODEL, ContextKey
 from schemas import IssueList
 
 
 def get_finder_instruction(tool_context: ToolContext) -> str:
-    html = tool_context.state.get(ContextKey.DOM_HTML, '')
+    html = tool_context.state.get(ContextKey.DOM_HTML, "")
     report = tool_context.state.get(ContextKey.LOOP_REPORT, '{"issue_list": []}')
-    wcag_prompt = tool_context.state.get(ContextKey.WCAG_PROMPT, '')
-    checker_feedback = tool_context.state.get(ContextKey.LOOP_NOTES, '')
-    
-    return f"""
+    wcag_prompt = tool_context.state.get(ContextKey.WCAG_PROMPT, "")
+    checker_feedback = tool_context.state.get(ContextKey.LOOP_NOTES, "")
+
+    return (
+        f"""
         You are an accessibility issue FINDER for WCAG compliance.
 
         WCAG 2.2 Reference:
@@ -26,10 +27,11 @@ def get_finder_instruction(tool_context: ToolContext) -> str:
         Current Report:
         {report}
 
-        {'Checker Feedback: ' + checker_feedback if checker_feedback else ''}
+        {"Checker Feedback: " + checker_feedback if checker_feedback else ""}
 
         ---
-        """ + """
+        """
+        + """
         TASK:
         Find NEW accessibility issues in the focused area that are NOT in current report.
 
@@ -51,15 +53,18 @@ def get_finder_instruction(tool_context: ToolContext) -> str:
         - Return ONLY the JSON object
         - Do not add extra keys beyond the schema
     """
+    )
+
 
 def get_checker_instruction(tool_context: ToolContext) -> str:
-    html = tool_context.state.get(ContextKey.DOM_HTML, '')
+    html = tool_context.state.get(ContextKey.DOM_HTML, "")
     report = tool_context.state.get(ContextKey.LOOP_REPORT, '{"issue_list": []}')
     iteration = tool_context.state.get(ContextKey.LOOP_ITERATION, 0)
-    
-    return f"""
+
+    return (
+        f"""
         You are a COMPLETENESS CHECKER.
-        
+
         First of all run only once the tool `inc_loop_it`, then proceed.
 
         HTML to Analyze:
@@ -68,7 +73,8 @@ def get_checker_instruction(tool_context: ToolContext) -> str:
         Report:
         {report}
 
-        Iteration (1-based): {iteration + 1}"""+"""
+        Iteration (1-based): {iteration + 1}"""
+        + """
 
         SCOPE (target coverage: 85%)
         Check these 5 areas and mark each as Covered / Not covered:
@@ -87,22 +93,20 @@ def get_checker_instruction(tool_context: ToolContext) -> str:
         Otherwise, if a category is clearly missing:
         - Return: "Missing: <category>"
     """
+    )
 
-def exit_loop(tool_context: ToolContext) -> Dict[str, Any]:
-    """
-    Signal the loop agent to stop iterating.
-    """
+
+def exit_loop(tool_context: ToolContext) -> dict[str, Any]:
+    """Signal the loop agent to stop iterating."""
     iteration = tool_context.state.get(ContextKey.LOOP_ITERATION, 0)
 
     tool_context.actions.escalate = True
     tool_context.actions.skip_summarization = True
     return {"status": "complete", "iteration": iteration}
 
-def inc_loop_it(tool_context: ToolContext) -> Dict[str, Any]:
-    """
-    Increase loop iteration in tool context, to stay updated
-    """
 
+def inc_loop_it(tool_context: ToolContext) -> dict[str, Any]:
+    """Increase loop iteration in tool context, to stay updated"""
     iteration = tool_context.state.get(ContextKey.LOOP_ITERATION, 0)
     tool_context.state[ContextKey.LOOP_ITERATION] = iteration + 1
     return {"status": "success", "iteration": iteration + 1}

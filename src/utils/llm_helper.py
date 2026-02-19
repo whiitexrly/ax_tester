@@ -1,9 +1,14 @@
-from typing import Any, Dict, List
+from typing import Any
 
 import litellm
 
-def call_llm(model: str, temperature: float, messages: List[Dict[str, Any]]) -> str:
-    resp = litellm.completion( model=model, messages=messages, temperature=temperature,)
+
+def call_llm(model: str, temperature: float, messages: list[dict[str, Any]]) -> str:
+    resp = litellm.completion(
+        model=model,
+        messages=messages,
+        temperature=temperature,
+    )
 
     if isinstance(resp, str):
         return resp

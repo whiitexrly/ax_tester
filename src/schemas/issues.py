@@ -1,9 +1,11 @@
-from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
 
 SeverityKey = Literal["critical", "serious", "moderate", "minor"]
 SourceType = Literal["axe", "llm", "both"]
 ConfidenceLevel = Literal["high", "medium", "low"]
+
 
 class Issue(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
@@ -29,8 +31,8 @@ class SeverityCount(BaseModel):
         extra="forbid",
         json_schema_extra={
             "additionalProperties": False,
-            "required": ["critical", "serious", "moderate", "minor"]
-        }
+            "required": ["critical", "serious", "moderate", "minor"],
+        },
     )
 
     critical: int = Field(0)
@@ -38,26 +40,20 @@ class SeverityCount(BaseModel):
     moderate: int = Field(0)
     minor: int = Field(0)
 
+
 class SourceCount(BaseModel):
     model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "additionalProperties": False,
-            "required": ["axe", "llm", "both"]
-        }
+        extra="forbid", json_schema_extra={"additionalProperties": False, "required": ["axe", "llm", "both"]}
     )
 
     axe: int = Field(0)
     llm: int = Field(0)
     both: int = Field(0)
 
+
 class WcagLevelCount(BaseModel):
     model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "additionalProperties": False,
-            "required": ["A", "AA", "AAA"]
-        }
+        extra="forbid", json_schema_extra={"additionalProperties": False, "required": ["A", "AA", "AAA"]}
     )
 
     A: int = Field(0)
@@ -75,6 +71,7 @@ class StaticReport(BaseModel):
     by_wcag_level: WcagLevelCount = Field(...)
     coverage_score: float = Field(...)
     top_priorities: list[str] = Field(...)
+
 
 class ImageAnalyzerReport(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})

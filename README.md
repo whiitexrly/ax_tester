@@ -126,3 +126,12 @@ adk web
 ```
 > [!NOTE]
 > `adk web` must be run from the parent directory of `ax_tester`.
+
+
+## Code style
+
+This project uses **Ruff** for formatting and linting. The same checks are enforced by the CI workflow ([`python-format.yml`](.github/workflows/python-format.yml)), so your push/PR will fail if they don’t pass. Run the following commands before pushing from root directory:
+
+```bash
+ruff check --fix src main.py
+ruff format src main.py
