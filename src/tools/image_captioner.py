@@ -7,9 +7,8 @@ from urllib.request import Request, urlopen
 
 import cairosvg
 
-from tools.base import AccessibilityTool, ToolExecutionError, ToolResult, ToolStatus
+from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
 from utils.llm_helper import call_llm
-
 from common import MODEL_NAME
 
 
@@ -22,6 +21,8 @@ DEFAULT_PROMPT = """
     Be specific, avoid filler, and do not mention 'image' or 'photo'.
     If text is visible, include it verbatim.
     Return JSON ONLY as an array of objects with keys: index, caption.
+    Do not add extra keys or commentary.
+    Use valid JSON with double quotes.
     The index must match the number shown in the input label "Image {index}".
     
     Example output:
@@ -32,7 +33,7 @@ DEFAULT_PROMPT = """
 """
 
 
-class ImageCaptioner(AccessibilityTool):
+class ImageCaptioner(Tool):
     """
     Generate image captions using an LLM. Downloads images and sends them to the model.
     """
@@ -194,22 +195,6 @@ class ImageCaptioner(AccessibilityTool):
             })
 
         return [{"role": "user", "content": content}]
-        if isinstance(resp, str):
-            return resp
-        if hasattr(resp, "choices") and resp.choices:
-            choice = resp.choices[0]
-            if hasattr(choice, "message") and isinstance(choice.message, dict):
-                return choice.message.get("content", "")
-            if hasattr(choice, "message") and hasattr(choice.message, "content"):
-                return choice.message.content
-            if hasattr(choice, "text"):
-                return choice.text
-        if isinstance(resp, dict):
-            choices = resp.get("choices") or []
-            if choices:
-                message = choices[0].get("message") or {}
-                return message.get("content", "") or choices[0].get("text", "")
-        return ""
 
     def _parse_captions(self, text: str, batch: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         try:

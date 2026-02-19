@@ -1,4 +1,3 @@
-# src/tools/axe_core_tool.py
 """
 Axe-Core accessibility testing tool integration
 
@@ -17,13 +16,14 @@ from typing import Any, Dict, List, Optional
 
 from playwright.async_api import async_playwright, Error as PlaywrightError
 
-from tools.base import AccessibilityTool, ToolResult, ToolStatus, ToolExecutionError
+from tools.base import Tool, ToolResult, ToolStatus, ToolExecutionError
+from schemas import Issue
 
 
 logger = logging.getLogger(__name__)
 
 
-class AxeCoreTool(AccessibilityTool):
+class AxeCoreTool(Tool):
     """
     Axe-Core static accessibility analyzer
     
@@ -98,10 +98,12 @@ class AxeCoreTool(AccessibilityTool):
             violations = axe_results.get('violations', [])
             incomplete = axe_results.get('incomplete', [])
             inapplicable = axe_results.get('inapplicable', [])
+
+            issue_list = self._map_violations_to_issues(violations)
             
             logger.info(
                 f"Axe-core analysis complete: {len(violations)} violations, "
-                f"{len(incomplete)} incomplete"
+                f"{len(incomplete)} incomplete, {len(issue_list)} mapped issues"
             )
             
             return ToolResult(
@@ -111,6 +113,7 @@ class AxeCoreTool(AccessibilityTool):
                     "violations": violations,
                     "incomplete": incomplete,
                     "inapplicable": inapplicable,
+                    "issue_list": issue_list,
                     "url": url,
                     "timestamp": axe_results.get('timestamp')
                 },
@@ -146,7 +149,7 @@ class AxeCoreTool(AccessibilityTool):
         def _runner():
             try:
                 result_holder["value"] = asyncio.run(coro)
-            except Exception as exc:  # pragma: no cover - thread boundary
+            except Exception as exc:
                 error_holder["error"] = exc
 
         thread = threading.Thread(target=_runner, daemon=True)
@@ -227,6 +230,35 @@ class AxeCoreTool(AccessibilityTool):
                 try:
                     await browser.close()
                 except: pass
+
+    def _map_violations_to_issues(self, violations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        issues: List[Dict[str, Any]] = []
+        for v in violations:
+            wcag = v.get("id") or ""
+            description = v.get("description") or v.get("help") or ""
+            impact = v.get("impact") or "moderate"
+            for idx, node in enumerate(v.get("nodes", [])):
+                snippet = node.get("html") or ""
+                target = node.get("target") or []
+                node_id = "-".join([str(t) for t in target]) if target else str(idx)
+                issue = Issue(
+                    id=f"axe-{wcag}-{node_id}",
+                    wcag_rule=wcag,
+                    description=description,
+                    severity=self._map_impact(impact),
+                    source="axe",
+                    confidence="high",
+                    html_snippet=snippet.replace("\\n", " "),
+                    fix=v.get("help") or v.get("helpUrl") or "",
+                ).model_dump()
+                issues.append(issue)
+        return issues
+
+    def _map_impact(self, impact: str) -> str:
+        impact = (impact or "moderate").lower()
+        if impact in {"critical", "serious", "moderate", "minor"}:
+            return impact
+        return "moderate"
 
 
 # simple test runner

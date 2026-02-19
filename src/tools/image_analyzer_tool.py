@@ -3,10 +3,11 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
-from tools.base import AccessibilityTool, ToolExecutionError, ToolResult, ToolStatus
+from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
 from tools.image_extractor import ImageExtractor
 from tools.image_captioner import ImageCaptioner
 from utils.llm_helper import call_llm
+from schemas import Issue
 
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ SIMILARITY_PROMPT = """
     Don't be too strict: minor wording differences are OK, missing key information is NOT OK.
     If the alt text is empty, return false. If the caption is empty, return false.
     The index must match the number shown in the input label "Image {index}".
+    Do not add extra keys or commentary. Use valid JSON with double quotes.
 
     Example output:
     [
@@ -27,7 +29,7 @@ SIMILARITY_PROMPT = """
 """
 
 
-class ImageAnalyzerTool(AccessibilityTool):
+class ImageAnalyzerTool(Tool):
     """
     Orchestrates image extraction and captioning.
     Runs ImageExtractor first, then ImageCaptioner on the extracted images,
@@ -80,21 +82,21 @@ class ImageAnalyzerTool(AccessibilityTool):
             logger.info(f"Analyzing similarity of alt text and captions for {len(captioned_images)} images")
             similarity = self._analyze_similarity(captioned_images)
 
-            issue_list = []
+            issue_list: List[Dict[str, Any]] = []
             for idx, sim in enumerate(similarity):
                 img = captioned_images[idx]
                 if not sim:
-                    issue_list.append({
-                        "id": f"image-alt-mismatch-{idx}",
-                        "wcag_rule": "1.1.1 - Non-text Content (Level A)",
-                        "description": "Missing alt text" if not img.get("alt_text") else f"Alt text and caption do not match for image",
-                        "url": img.get("url"),
-                        "html_snippet": img.get("source_selector"),
-                        "severity": "critical",
-                        "confidence": "high",
-                        "source": "llm",
-                        "fix": f"Improve alt text, e.g. {img.get('caption')}",
-                    })
+                    issue = Issue(
+                        id=f"image-alt-mismatch-{idx}",
+                        wcag_rule="1.1.1 - Non-text Content (Level A)",
+                        description="Missing alt text" if not img.get("alt_text") else "Alt text and caption do not match for image",
+                        html_snippet=img.get("source_selector") or "",
+                        severity="critical",
+                        confidence="high",
+                        source="llm",
+                        fix=f"Improve alt text, e.g. {img.get('caption')}",
+                    ).model_dump()
+                    issue_list.append(issue)
 
             return ToolResult(
                 tool_name="image-analyzer",

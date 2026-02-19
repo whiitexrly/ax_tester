@@ -5,10 +5,10 @@ Base interface for all accessibility testing tools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
-from enum import Enum
+from enum import StrEnum
 
 
-class ToolStatus(Enum):
+class ToolStatus(StrEnum):
     """Execution status of a tool"""
     SUCCESS = "success"
     FAILURE = "failure"
@@ -49,7 +49,7 @@ class ToolResult:
         }
 
 
-class AccessibilityTool(ABC):
+class Tool(ABC):
     """
     Abstract base class for all accessibility testing tools
     

@@ -4,7 +4,7 @@ import logging
 import threading
 from playwright.async_api import async_playwright
 
-from tools.base import AccessibilityTool, ToolExecutionError, ToolResult, ToolStatus
+from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ JS_COLLECT = r"""
 }
 """
 
-class ImageExtractor(AccessibilityTool):
+class ImageExtractor(Tool):
     """
     Extract images and image-like resources from a webpage using Playwright.
     """

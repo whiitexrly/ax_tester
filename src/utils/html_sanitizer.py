@@ -5,7 +5,6 @@ Reduces HTML size by 60-80% while preserving all accessibility-relevant informat
 """
 
 import re
-from typing import Set
 from bs4 import BeautifulSoup, Comment, Tag
 
 

@@ -4,10 +4,9 @@ from google.adk.tools.tool_context import ToolContext
 from common import ContextKey, MODEL
 from utils.html_sanitizer import sanitize_html_for_llm
 
+import yaml
 from typing import Dict, Any
 from pathlib import Path
-import yaml
-
 import urllib.request
 
 

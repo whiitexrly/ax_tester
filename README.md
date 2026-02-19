@@ -58,6 +58,52 @@ The **Static Analysis Agent** runs an accessibility assessment from the availabl
                        Final Valid JSON         
                        issues[] + summary       
 ```
+## Semantic Analysis Agent
+The **Semantic Analysis Agent** checks whether images’ `alt` text is *semantically consistent* with what the image depicts. It runs a *sequential pipeline* (tools only) and outputs a single structured report.
+
+### High-level pipeline
+
+1. **Image + Alt Extractor**
+   - Parses the available HTML/DOM.
+   - Collects all images and their related `alt` text (if present).
+
+2. **Caption Generator**
+   - Generates a caption for each extracted image using LLM calls.
+
+3. **Alt–Caption Similarity Verifier**
+   - Verifies that each image caption and its `alt` text are similar enough.
+   - Output: `image_analyzer_report` (issues + summary)
+
+
+```text
+               ┌──────────────────────────────┐
+               │   Semantic Analysis          │
+               │   Component                  │
+               └──────────────┬───────────────┘
+                              │
+                              │ [fetch_dom_html]
+                              v
+                ┌─────────────────────────────┐
+                │  Image Extractor Tool       │
+                │  (images + alt collection)  │
+                └──────────────┬──────────────┘
+                               │ images_inventory[]
+                               v
+                ┌─────────────────────────────┐
+                │  Caption Generator Tool     │
+                │  (caption per image)        │
+                └──────────────┬──────────────┘
+                               │ captions[]
+                               v
+                ┌─────────────────────────────┐
+                │  Similarity Verifier Tool   │
+                │  (alt vs caption match)     │
+                └──────────────┬──────────────┘
+                               │ semantic_report
+                               v
+                      Final Semantic JSON
+                      issues[] + summary
+```
 
 ## Installation and Usage
 Install environment and dependencies: `cd` in `ax_tester` directory, then: 
@@ -67,8 +113,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e .
 rm -rf src/ax_tester.egg-info/
+playwright install
 npm i
 ```
+
+Create a `.env` file as suggested in [env.example](/.env.example). Moreover, you can use any LLM model just by providing the required `API_KEY` in `.env` file and changing the used model name in [model.py](/src/common/model.py).
 
 To run the client agent, using the same terminal with source `.venv`:
 ```bash
@@ -76,4 +125,4 @@ cd ..
 adk web
 ```
 > [!NOTE]
-> `adk wb` must be run from the parent directory of `ax_tester`.
+> `adk web` must be run from the parent directory of `ax_tester`.

@@ -1,8 +1,9 @@
 wcag_version: "2.2"
 output_requirements:
-  - "For each non-conformance: id, title, level, evidence (what/where html), user impact, fix, how to verify."
+  - "For each issue: id, wcag_rule, description, severity, source, confidence, html_snippet, fix."
+  - "Do not include extra keys beyond the required schema."
   - "Do not report criteria from other levels than the one requested."
-  - "If not applicable: explain why (e.g., no prerecorded media, no user inputs, etc.)."
+  - "If not applicable: skip and do not output an issue."
 
 levels:
 
