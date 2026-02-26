@@ -6,6 +6,42 @@ from enum import StrEnum
 from typing import Any
 
 
+@dataclass
+class NavigationCommand(StrEnum):
+    """Command usable for navigtion"""
+
+    TAB = "Tab"
+    SHIFT_TAB = "Shift+Tab"
+    SPACE = "Space"
+    ENTER = "Enter"
+    ESCAPE = "Escape"
+
+
+@dataclass
+class ActiveElementInfo:
+    backend_dom_node_id: int | None
+    page_screenshot: str | None
+    element_screenshot: str | None
+    element_ax_info: dict[str, Any] | None
+    element_out_html: str | None
+    element_html_tag: str | None
+
+
+@dataclass
+class NavigatorState:
+    """Navigation state snapshot around the current focus.
+
+    Stores page/element screenshots and AX info for previous/current/next
+    focus targets. Screenshots are typically base64-encoded strings.
+    """
+
+    path: list[NavigationCommand]
+
+    # element info
+    prv_active_element: ActiveElementInfo | None
+    cur_active_element: ActiveElementInfo | None
+
+
 class ToolStatus(StrEnum):
     """Execution status of a tool"""
 

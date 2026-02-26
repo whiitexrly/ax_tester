@@ -1,4 +1,9 @@
-from schemas.issues import ImageAnalyzerReport, Issue, IssueList, StaticReport
+from schemas.issues import (
+    ImageAnalyzerReport,
+    Issue,
+    IssueList,
+    StaticReport,
+)
 
 __all__ = [
     "ImageAnalyzerReport",

@@ -39,7 +39,7 @@ def analyze_images_in_webpage(tool_context: ToolContext, url: str) -> dict:
     }
 
 
-image_analyzer = LlmAgent(
+image_analyzer_agent = LlmAgent(
     name="ImageAnalyzer",
     model=MODEL,
     description="Analyzes images in a webpage and ensure they have consistent alt text.",

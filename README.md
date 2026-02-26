@@ -47,12 +47,7 @@ The **Static Analysis Agent** runs an accessibility assessment from the availabl
                   │  Merge Agent             │
                   │  (dedupe + unify)        │
                   └────────────┬─────────────┘
-                               │ merged_report
-                               v
-                  ┌──────────────────────────┐
-                  │  JSON Formatter          │
-                  │  (normalize + validate)  │
-                  └────────────┬─────────────┘
+                               │ static_report
                                │
                                v
                        Final Valid JSON         
@@ -105,6 +100,42 @@ The **Semantic Analysis Agent** checks whether images’ `alt` text is *semantic
                       issues[] + summary
 ```
 
+## Navigator Agent
+The **Navigator Agent** performs runtime navigation using Playwright and emits a stream of `NavigatorState` snapshots. It follows a producer/consumer model:
+- **Producer (Navigator)**: walks focusable elements (Tab/Space), captures screenshots and AX info.
+- **Consumers**: analyze each state independently and emit WCAG issues. Each consumer specializes in one WCAG rule (or a small set of closely related ones).
+
+Currently the navigator integrates a **Focus Consumer** that checks focus visibility (WCAG 2.4.7) using the element screenshot.
+
+### High-level pipeline
+
+1. **Runtime Navigator Tool**
+   - Navigates the page using keyboard.
+   - Emits `NavigatorState` (prev/current focus context).
+
+2. **Focus Consumer**
+   - Consumes each state and collects element screenshots.
+   - Uses LLM analysis to detect missing focus indicators.
+   - Output: `<consumer-name>_navigation_report`
+
+```text
+                ┌──────────────────────────────┐
+                │   Runtime Navigator          │
+                │   Component                  │
+                └──────────────┬───────────────┘
+                               │
+                               │ NavigatorState stream
+                               v
+              ┌─────────────────────────────┐
+              | ┌─────────────────────────────┐
+              └─│           Consumer          │
+                └──────────────┬──────────────┘
+                               │ <name>_navigation_report
+                               v
+                      Consumer Report JSON
+                      issues[] + summary
+```
+
 ## Installation and Usage
 Install environment and dependencies: `cd` in `ax_tester` directory, then: 
 
@@ -133,5 +164,5 @@ adk web
 This project uses **Ruff** for formatting and linting. The same checks are enforced by the CI workflow ([`python-format.yml`](.github/workflows/python-format.yml)), so your push/PR will fail if they don’t pass. Run the following commands before pushing from root directory:
 
 ```bash
-ruff check --fix src main.py
-ruff format src main.py
+ruff check --fix && ruff format
+```

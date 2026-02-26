@@ -8,7 +8,8 @@ from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.sequential_agent import SequentialAgent
 from google.adk.tools.tool_context import ToolContext
 
-from agents.semantic_agent.image_analyzer import image_analyzer
+from agents.navigation_agent import navigator_agent
+from agents.semantic_agent import image_analyzer_agent
 from agents.static_agent import static_analysis_agent
 from common import MODEL, ContextKey
 
@@ -23,11 +24,13 @@ def run_save(tool_context: ToolContext):
     results_dir = f"ax_tester/results/{date_str}"
     os.makedirs(results_dir, exist_ok=True)
 
-    with open(f"{results_dir}/static_report.json", "w") as f:
-        json.dump(tool_context.state.get(ContextKey.STATIC_REPORT), f, indent=2, ensure_ascii=False)
-
-    with open(f"{results_dir}/image_analyzer_report.json", "w") as f:
-        json.dump(tool_context.state.get(ContextKey.IMAGE_ANALYZER_REPORT), f, indent=2, ensure_ascii=False)
+    for report in [
+        ContextKey.STATIC_REPORT,
+        ContextKey.IMAGE_ANALYZER_REPORT,
+        ContextKey.FOCUS_NAVIGATION_REPORT,
+    ]:
+        with open(f"{results_dir}/{report.lower()}.json", "w") as f:
+            json.dump(tool_context.state.get(report), f, indent=2, ensure_ascii=False)
 
 
 saver = LlmAgent(
@@ -37,10 +40,10 @@ saver = LlmAgent(
 root_agent = SequentialAgent(
     name="AccessibilityAgent",
     description="Performs static and semantic analysis on a web page, given an URL",
-    sub_agents=[static_analysis_agent, image_analyzer, saver],
+    sub_agents=[
+        static_analysis_agent,
+        image_analyzer_agent,
+        navigator_agent,
+        saver,
+    ],
 )
-
-(a, b, c) = (1, 2, 3)
-
-# root_agent = image_analyzer
-# root_agent = static_analysis_agent
