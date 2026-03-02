@@ -35,7 +35,10 @@ def analyze_runtime_navigation(
     for item in consumer_results:
         issues = item.get("result").get("issue_list")
         key = item.get("report_key")
-        tool_context.state[key] = issues
+        if key in tool_context.state and isinstance(tool_context.state[key], list):
+            tool_context.state[key] = tool_context.state[key] + (issues or [])
+        else:
+            tool_context.state[key] = issues or []
 
     return {
         "status": "success" if result["status"] == "success" else "failure",

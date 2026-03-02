@@ -15,4 +15,5 @@ class ContextKey(StrEnum):
     # final outcomes:
     STATIC_REPORT = "static_report"
     IMAGE_ANALYZER_REPORT = "image_analyzer_report"
-    FOCUS_NAVIGATION_REPORT = "focus_navigation_report"
+    FOCUS_VISIBLE_REPORT = "focus_visible_report"
+    ON_FOCUS_REPORT = "on_focus_report"

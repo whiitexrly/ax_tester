@@ -11,7 +11,7 @@ class BaseConsumer(ABC):
     report_key: str = "report-key"
 
     @abstractmethod
-    def consume(self, state: NavigatorState) -> None:
+    def consume(self, state: NavigatorState, **kwargs) -> None:
         """Consume a navigation state."""
 
     @abstractmethod

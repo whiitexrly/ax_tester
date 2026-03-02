@@ -105,18 +105,26 @@ The **Navigator Agent** performs runtime navigation using Playwright and emits a
 - **Producer (Navigator)**: walks focusable elements (Tab/Space), captures screenshots and AX info.
 - **Consumers**: analyze each state independently and emit WCAG issues. Each consumer specializes in one WCAG rule (or a small set of closely related ones).
 
-Currently the navigator integrates a **Focus Consumer** that checks focus visibility (WCAG 2.4.7) using the element screenshot.
 
 ### High-level pipeline
 
-1. **Runtime Navigator Tool**
+1. **Runtime Navigator Tool** 
    - Navigates the page using keyboard.
    - Emits `NavigatorState` (prev/current focus context).
 
-2. **Focus Consumer**
+2. **Focus Visible Consumer** (WCAG 2.4.7m Level AA)
    - Consumes each state and collects element screenshots.
    - Uses LLM analysis to detect missing focus indicators.
-   - Output: `<consumer-name>_navigation_report`
+   - Output: `focus_visible_report`
+
+3. **On Focus Consumer** (WCAG 3.2.1, Level A)
+   - Detects unexpected context changes caused by focus transitions.
+   - Flags events such as:
+     - new tab/window opened only by focus
+     - URL/title change triggered by focus alone
+     - wrong focus restore behavior after `Space` / `Escape` on expandable widgets
+   - Output: `on_focus_report`
+
 
 ```text
                 ┌──────────────────────────────┐
@@ -130,7 +138,7 @@ Currently the navigator integrates a **Focus Consumer** that checks focus visibi
               | ┌─────────────────────────────┐
               └─│           Consumer          │
                 └──────────────┬──────────────┘
-                               │ <name>_navigation_report
+                               │ <name>_report
                                v
                       Consumer Report JSON
                       issues[] + summary

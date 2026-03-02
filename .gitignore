@@ -10,3 +10,5 @@ __pycache__/
 *.pyc
 *.egg-info/
 .ruff_cache
+debug_*.py
+agents.md

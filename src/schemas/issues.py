@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 SeverityKey = Literal["critical", "serious", "moderate", "minor"]
-SourceType = Literal["axe", "llm", "both", "llm/focus_analyzer"]
+SourceType = Literal["axe", "llm", "both", "llm/focus_visible_analyzer", "llm/on_focus_analyzer"]
 ConfidenceLevel = Literal["high", "medium", "low"]
 
 

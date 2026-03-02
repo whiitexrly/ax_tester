@@ -25,6 +25,15 @@ class ActiveElementInfo:
     element_ax_info: dict[str, Any] | None
     element_out_html: str | None
     element_html_tag: str | None
+    page_url: str | None
+    page_title: str | None
+    context_page_count: int | None
+
+    def get_focus_key(self) -> str:
+        backend_id = self.backend_dom_node_id
+        if backend_id is not None:
+            return f"id:{backend_id}"
+        return f"html:{self.element_html_tag}:{self.element_out_html}"
 
 
 @dataclass

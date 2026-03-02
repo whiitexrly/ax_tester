@@ -27,7 +27,8 @@ def run_save(tool_context: ToolContext):
     for report in [
         ContextKey.STATIC_REPORT,
         ContextKey.IMAGE_ANALYZER_REPORT,
-        ContextKey.FOCUS_NAVIGATION_REPORT,
+        ContextKey.FOCUS_VISIBLE_REPORT,
+        ContextKey.ON_FOCUS_REPORT,
     ]:
         with open(f"{results_dir}/{report.lower()}.json", "w") as f:
             json.dump(tool_context.state.get(report), f, indent=2, ensure_ascii=False)

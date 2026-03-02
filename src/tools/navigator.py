@@ -28,7 +28,7 @@ from tools.base import (
     ToolResult,
     ToolStatus,
 )
-from tools.consumers import BaseConsumer, FocusConsumer
+from tools.consumers import BaseConsumer, FocusConsumer, OnFocusConsumer
 from utils.cdp_helper import get_ax_info_cdp, get_backend_dom_node_id
 from utils.screenshots import get_element_screenshot, get_page_screenshot
 
@@ -47,7 +47,7 @@ class RuntimeNavigatorTool(Tool):
         self.tab_delay_ms = self.config.get("tab_delay_ms", 50)
         self.expand_delay_ms = self.config.get("expand_delay_ms", 1000)
         self.initial_wait_ms = self.config.get("initial_wait_ms", 1000)
-        self.consumers: list[BaseConsumer] = self.config.get("consumers") or [FocusConsumer()]
+        self.consumers: list[BaseConsumer] = self.config.get("consumers") or [FocusConsumer(), OnFocusConsumer()]
 
     def execute(self, url: str, **kwargs) -> ToolResult:
         """Execute runtime navigation on the given URL."""
@@ -155,7 +155,7 @@ class RuntimeNavigatorTool(Tool):
                         prv_active_element=None,
                         cur_active_element=None,
                     ),
-                    stop_key=self._focus_key(start_element),
+                    stop_key=start_element.get_focus_key(),
                 )
 
                 return {
@@ -194,10 +194,10 @@ class RuntimeNavigatorTool(Tool):
 
         cur_active_element = await self._capture_active_element(page, cdp)
 
-        cur_focus_key = self._focus_key(cur_active_element)
+        cur_focus_key = cur_active_element.get_focus_key()
         for _step in range(1, max_steps + 1):
             # get info of current active element
-            state.path = path
+            state.z = path
             state.prv_active_element = state.cur_active_element
             state.cur_active_element = cur_active_element
 
@@ -212,31 +212,47 @@ class RuntimeNavigatorTool(Tool):
                 # get new stop key
                 await self._only_press_key(page, NavigationCommand.TAB, tab_delay_ms, expand_delay_ms)
                 nxt_active_element = await self._capture_active_element(page, cdp)
-                nxt_stop_key = self._focus_key(nxt_active_element)
+                nxt_stop_key = nxt_active_element.get_focus_key()
                 await self._only_press_key(page, NavigationCommand.SHIFT_TAB, tab_delay_ms, expand_delay_ms)
 
                 # expand and navigate inside expandable
+                root_focus_key = cur_active_element.get_focus_key()
                 await self._press_key(page, NavigationCommand.SPACE, path, tab_delay_ms, expand_delay_ms)
+                self._consume_state(
+                    NavigatorState(
+                        path=path,
+                        cur_active_element=await self._capture_active_element(page, cdp),
+                        prv_active_element=None,
+                    ),
+                    root_focus_key=root_focus_key,
+                )
+
+                # navigate inside subtree
                 await self._navigate_recursive_subtree(
                     page, cdp, max_steps, tab_delay_ms, expand_delay_ms, state, nxt_stop_key
                 )
 
                 # return to current state
-                await self._only_press_key(page, NavigationCommand.ESCAPE, tab_delay_ms, expand_delay_ms)
+                await self._press_key(page, NavigationCommand.ESCAPE, path, tab_delay_ms, expand_delay_ms)
+                self._consume_state(
+                    NavigatorState(
+                        path=path,
+                        cur_active_element=await self._capture_active_element(page, cdp),
+                        prv_active_element=None,
+                    ),
+                    root_focus_key=root_focus_key,
+                )
+                path.pop()  # pop last escape added
                 path.pop()  # pop last space added
 
             # try to move on, if it's not a stop
             await self._press_key(page, NavigationCommand.TAB, path, tab_delay_ms, expand_delay_ms)
-            new_active_element = await self._capture_active_element(page, cdp)
-            new_focus_key = self._focus_key(new_active_element)
+            cur_active_element = await self._capture_active_element(page, cdp)
+            cur_focus_key = cur_active_element.get_focus_key()
 
-            if new_focus_key == stop_key:
+            if cur_focus_key == stop_key:
                 await self._only_press_key(page, NavigationCommand.SHIFT_TAB, tab_delay_ms, expand_delay_ms)
                 return
-
-            # update following current element
-            cur_active_element = new_active_element
-            cur_focus_key = new_focus_key
 
     async def _capture_active_element(self, page: Page, cdp: CDPSession) -> ActiveElementInfo | None:
         handle = await page.evaluate_handle("() => document.activeElement")
@@ -262,15 +278,18 @@ class RuntimeNavigatorTool(Tool):
                 element_ax_info=ax_info,
                 element_out_html=outer_html,
                 element_html_tag=tag,
+                page_url=page.url,
+                page_title=await page.title(),
+                context_page_count=len(page.context.pages),
             )
         finally:
             await element.dispose()
 
-    def _consume_state(self, state: NavigatorState) -> None:
+    def _consume_state(self, state: NavigatorState, **kwargs) -> None:
         """Dispatch state to registered consumers."""
         for consumer in self.consumers:
             try:
-                consumer.consume(state)
+                consumer.consume(state, **kwargs)
             except Exception:
                 logger.exception(f"Consumer {consumer.name} failed to consume state")
 
@@ -283,12 +302,6 @@ class RuntimeNavigatorTool(Tool):
             except Exception:
                 logger.exception(f"Consumer {consumer.name} finalize error")
         return results
-
-    def _focus_key(self, info: ActiveElementInfo) -> str:
-        backend_id = info.backend_dom_node_id
-        if backend_id is not None:
-            return f"id:{backend_id}"
-        return f"html:{info.element_html_tag}:{info.element_out_html}"
 
     def _get_expanded_value(self, ax_info: dict[str, Any]) -> bool | None:
         props = ax_info.get("properties") or {}

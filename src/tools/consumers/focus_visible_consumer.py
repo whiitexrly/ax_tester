@@ -35,7 +35,7 @@ class FocusConsumer(BaseConsumer):
     """Analyze focus visibility using navigator states."""
 
     name = "focus-consumer"
-    report_key = ContextKey.FOCUS_NAVIGATION_REPORT
+    report_key = ContextKey.FOCUS_VISIBLE_REPORT
 
     def __init__(
         self,
@@ -52,7 +52,7 @@ class FocusConsumer(BaseConsumer):
         self._steps = 0
         self._seen_ids: set[int] = set()
 
-    def consume(self, state: NavigatorState) -> None:
+    def consume(self, state: NavigatorState, **kwargs) -> None:
         """Collect screenshot data from the current state."""
         self._steps += 1
         current = state.cur_active_element
@@ -191,7 +191,7 @@ class FocusConsumer(BaseConsumer):
                     html_snippet=item.get("html_snippet", ""),
                     severity="serious",
                     confidence="high",
-                    source="llm/focus_analyzer",
+                    source="llm/focus_visible_analyzer",
                     fix="Ensure focused images display a clear focus outline or border.",
                 ).model_dump()
                 issues.append(issue)
