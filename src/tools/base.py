@@ -8,7 +8,7 @@ from typing import Any
 
 @dataclass
 class NavigationCommand(StrEnum):
-    """Command usable for navigtion"""
+    """Command usable for navigation"""
 
     TAB = "Tab"
     SHIFT_TAB = "Shift+Tab"

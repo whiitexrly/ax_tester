@@ -1,13 +1,11 @@
 from schemas.issues import (
-    ImageAnalyzerReport,
     Issue,
     IssueList,
-    StaticReport,
+    Report,
 )
 
 __all__ = [
-    "ImageAnalyzerReport",
     "Issue",
     "IssueList",
-    "StaticReport",
+    "Report",
 ]

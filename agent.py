@@ -1,7 +1,7 @@
 """ADK entrypoint for the ax-tester agent.
 
 This file exposes root_agent for ADK discovery while keeping the implementation
-inside src/agent/agent.py.
+inside src/agents.
 """
 
 from google.adk.agents.llm_agent import LlmAgent

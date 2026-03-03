@@ -95,8 +95,9 @@ class ImageAnalyzerTool(Tool):
                         html_snippet=img.get("source_selector") or "",
                         severity="critical",
                         confidence="high",
-                        source="llm",
+                        source="llm/image-analyzer",
                         fix=f"Improve alt text, e.g. {img.get('caption')}",
+                        image_url_or_path=img.get("url"),
                     ).model_dump()
                     issue_list.append(issue)
 

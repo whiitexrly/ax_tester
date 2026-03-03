@@ -1,6 +1,20 @@
 # Accessibility Tester
 AI agent capable of testing the accessibility (also referred to as a11y or ax) of web pages.
 
+## Unified Report Schema
+
+All final reports use the same `Report` schema:
+- `tool_name`: name of the tool/aggregator that produced the report
+- `issue_list`: list of normalized issues
+- `total_issues`: total number of issues in `issue_list`
+- `page`: analyzed URL
+- `metadata`: list of `{key, value}` entries for tool-specific extra data
+
+Each issue follows a single `Issue` schema and includes `image_url_or_path` (nullable):
+- use the original image URL when the image comes from the analyzed page
+- use a local path/folder when the issue refers to saved local screenshots
+- use `null` when not available
+
 ## Static Analysis Agent
 
 The **Static Analysis Agent** runs an accessibility assessment from the available HTML/DOM (no user interaction required) and produces a single, validated JSON report by combining:
@@ -21,6 +35,7 @@ The **Static Analysis Agent** runs an accessibility assessment from the availabl
    - Merges **`axe_report` + `loop_report`** into one unified report.
    - De-duplicates by *WCAG rule + same node*.
    - Assigns `source` (`axe|llm|both`) and `confidence`.
+   - Output: `static_report` (`Report`)
 
 4. **JSON Formatter**
    - Normalizes and validates the final JSON:
@@ -67,7 +82,7 @@ The **Semantic Analysis Agent** checks whether images’ `alt` text is *semantic
 
 3. **Alt–Caption Similarity Verifier**
    - Verifies that each image caption and its `alt` text are similar enough.
-   - Output: `image_analyzer_report` (issues + summary)
+   - Output: `image_analyzer_report` (`Report`)
 
 
 ```text
@@ -112,10 +127,10 @@ The **Navigator Agent** performs runtime navigation using Playwright and emits a
    - Navigates the page using keyboard.
    - Emits `NavigatorState` (prev/current focus context).
 
-2. **Focus Visible Consumer** (WCAG 2.4.7m Level AA)
+2. **Focus Visible Consumer** (WCAG 2.4.7, Level AA)
    - Consumes each state and collects element screenshots.
    - Uses LLM analysis to detect missing focus indicators.
-   - Output: `focus_visible_report`
+   - Output: `focus_visible_report` (`Report`)
 
 3. **On Focus Consumer** (WCAG 3.2.1, Level A)
    - Detects unexpected context changes caused by focus transitions.
@@ -123,7 +138,7 @@ The **Navigator Agent** performs runtime navigation using Playwright and emits a
      - new tab/window opened only by focus
      - URL/title change triggered by focus alone
      - wrong focus restore behavior after `Space` / `Escape` on expandable widgets
-   - Output: `on_focus_report`
+   - Output: `on_focus_report` (`Report`)
 
 
 ```text

@@ -31,7 +31,7 @@ FOCUS_VISIBILITY_PROMPT = """
 """
 
 
-class FocusConsumer(BaseConsumer):
+class FocusVisibleConsumer(BaseConsumer):
     """Analyze focus visibility using navigator states."""
 
     name = "focus-consumer"
@@ -81,7 +81,6 @@ class FocusConsumer(BaseConsumer):
             return {
                 "name": self.name,
                 "issue_list": [],
-                "steps": self._steps,
                 "checked": 0,
             }
 
@@ -94,7 +93,6 @@ class FocusConsumer(BaseConsumer):
         return {
             "name": self.name,
             "issue_list": issues,
-            "steps": self._steps,
             "checked": len(self._items),
         }
 
@@ -125,7 +123,7 @@ class FocusConsumer(BaseConsumer):
         return batches
 
     def _estimate_item_prompt_len(self, item: dict[str, Any]) -> int:
-        return len(item.get("b64", "")) + 200
+        return len(item.get("b64") or "") + 200
 
     def _analyze_batch(self, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
         messages = self._build_messages(batch)
@@ -193,6 +191,7 @@ class FocusConsumer(BaseConsumer):
                     confidence="high",
                     source="llm/focus_visible_analyzer",
                     fix="Ensure focused images display a clear focus outline or border.",
+                    image_url_or_path=None,
                 ).model_dump()
                 issues.append(issue)
         return issues

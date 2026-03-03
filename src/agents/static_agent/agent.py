@@ -9,7 +9,7 @@ from agents.static_agent.axe_core_agent import axe_agent
 from agents.static_agent.init_agent import init_agent
 from agents.static_agent.llm_finder_agent import loop_agent
 from common import MODEL, ContextKey
-from schemas import StaticReport
+from schemas import Report
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +17,20 @@ logger = logging.getLogger(__name__)
 def get_merge_agent_instruction(tool_context: ToolContext) -> str:
     import json
 
-    loop_report = tool_context.state.get(ContextKey.LOOP_REPORT, "[]")
+    loop_report = tool_context.state.get(ContextKey.LOOP_REPORT, {"issue_list": []})
+    if isinstance(loop_report, str):
+        try:
+            loop_report = json.loads(loop_report)
+        except Exception:
+            loop_report = {"issue_list": []}
     axe_report = tool_context.state.get(ContextKey.AXE_REPORT, {})
     axe_issue_list = []
+    page_url = ""
     if isinstance(axe_report, dict):
         axe_issue_list = axe_report.get("data", {}).get("issue_list", [])
+        page_url = axe_report.get("data", {}).get("url", "")
     axe_report_json = json.dumps(axe_issue_list, ensure_ascii=True)
+    loop_report_json = json.dumps(loop_report, ensure_ascii=True)
 
     return (
         f"""
@@ -35,7 +43,10 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
         {axe_report_json}
 
         loop_report:
-        {loop_report}
+        {loop_report_json}
+
+        page:
+        {page_url}
         """
         + """
 
@@ -45,13 +56,21 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
         3. Preserve all unique issues from both sources
         4. Add 'source' field: 'axe' | 'llm' | 'both'
 
-        Summary must include:
+        OUTPUT SCHEMA:
+        - tool_name: "static-analysis"
+        - issue_list: final deduplicated issue list
+          Each issue must include:
+          id, wcag_rule, description, severity, source, confidence, html_snippet, fix, image_url_or_path
+          (set image_url_or_path to null when unknown)
         - total_issues: number of unique issues
-        - by_severity: count per severity level
-        - by_source: axe_only, llm_only, both
-        - by_wcag_level: count per WCAG level (A, AA, AAA)
-        - coverage_score: estimated % of issues found (0-100)
-        - top_priorities: list of 5 most critical issues to fix first
+        - page: analyzed page URL
+        - metadata: list of objects with fields {key, value}
+          Required metadata keys:
+          - by_severity (JSON string)
+          - by_source (JSON string)
+          - by_wcag_level (JSON string)
+          - coverage_score (integer)
+          - top_priorities (JSON string)
 
         Return ONLY the JSON object, no other text.
         Keep html_snippet concise and valid JSON strings.
@@ -71,7 +90,7 @@ merge_agent = LlmAgent(
     name="MergeReportsAgent",
     model=MODEL,
     instruction=get_merge_agent_instruction,
-    output_schema=StaticReport,
+    output_schema=Report,
     description="Merge axe-core and LLM loop reports into a unified accessibility report.",
     output_key=ContextKey.STATIC_REPORT,
 )

@@ -3,7 +3,14 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 SeverityKey = Literal["critical", "serious", "moderate", "minor"]
-SourceType = Literal["axe", "llm", "both", "llm/focus_visible_analyzer", "llm/on_focus_analyzer"]
+SourceType = Literal[
+    "axe",
+    "llm",
+    "both",
+    "llm/image-analyzer",
+    "llm/focus_visible_analyzer",
+    "llm/on_focus_analyzer",
+]
 ConfidenceLevel = Literal["high", "medium", "low"]
 
 
@@ -18,6 +25,7 @@ class Issue(BaseModel):
     confidence: ConfidenceLevel = Field(...)
     html_snippet: str = Field(...)
     fix: str = Field(...)
+    image_url_or_path: str | None = Field(...)
 
 
 class IssueList(BaseModel):
@@ -26,57 +34,18 @@ class IssueList(BaseModel):
     issue_list: list[Issue] = Field(...)
 
 
-class SeverityCount(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "additionalProperties": False,
-            "required": ["critical", "serious", "moderate", "minor"],
-        },
-    )
-
-    critical: int = Field(0)
-    serious: int = Field(0)
-    moderate: int = Field(0)
-    minor: int = Field(0)
-
-
-class SourceCount(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid", json_schema_extra={"additionalProperties": False, "required": ["axe", "llm", "both"]}
-    )
-
-    axe: int = Field(0)
-    llm: int = Field(0)
-    both: int = Field(0)
-
-
-class WcagLevelCount(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid", json_schema_extra={"additionalProperties": False, "required": ["A", "AA", "AAA"]}
-    )
-
-    A: int = Field(0)
-    AA: int = Field(0)
-    AAA: int = Field(0)
-
-
-class StaticReport(BaseModel):
+class MetadataItem(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
 
-    issue_list: list[Issue] = Field(...)
+    key: str
+    value: str | int
+
+
+class Report(BaseModel):
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
+
+    tool_name: str = Field(...)
     total_issues: int = Field(...)
-    by_severity: SeverityCount = Field(...)
-    by_source: SourceCount = Field(...)
-    by_wcag_level: WcagLevelCount = Field(...)
-    coverage_score: float = Field(...)
-    top_priorities: list[str] = Field(...)
-
-
-class ImageAnalyzerReport(BaseModel):
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
-
     page: str = Field(...)
-    issue_list: list[Issue] = Field(default_factory=list)
-    skipped: int = Field(0)
-    extracted: int = Field(...)
+    issue_list: list[Issue] = Field(...)
+    metadata: list[MetadataItem] = Field(...)

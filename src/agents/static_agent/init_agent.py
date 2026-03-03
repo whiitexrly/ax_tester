@@ -23,8 +23,8 @@ def set_wcag_level(tool_context: ToolContext, level: str = "AA") -> dict[str, An
     with open(ROOT_DIR / "prompts" / "wcag.yml", encoding="utf-8") as f:
         wcag_data = yaml.safe_load(f)
     levels = wcag_data.get("levels") or {}
-    for level in range(len(normalized) + 1, 4):
-        levels.pop("A" * level, None)
+    for lev in range(len(normalized) + 1, 4):
+        levels.pop("A" * lev, None)
     wcag_data["levels"] = levels
 
     tool_context.state[ContextKey.WCAG_PROMPT] = yaml.safe_dump(wcag_data)

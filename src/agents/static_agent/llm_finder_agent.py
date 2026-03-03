@@ -44,6 +44,9 @@ def get_finder_instruction(tool_context: ToolContext) -> str:
 
         OUTPUT:
         Return ONLY JSON matching the output schema. No extra keys.
+        Each issue must include:
+        - id, wcag_rule, description, severity, source, confidence, html_snippet, fix, image_url_or_path
+        - Set image_url_or_path to null when not available.
 
         Severity: critical (blocks functionality) | serious (major impairment) | moderate (inconvenience) | minor (best practice)
 

@@ -28,7 +28,7 @@ from tools.base import (
     ToolResult,
     ToolStatus,
 )
-from tools.consumers import BaseConsumer, FocusConsumer, OnFocusConsumer
+from tools.consumers import BaseConsumer, FocusVisibleConsumer, OnFocusConsumer
 from utils.cdp_helper import get_ax_info_cdp, get_backend_dom_node_id
 from utils.screenshots import get_element_screenshot, get_page_screenshot
 
@@ -47,7 +47,10 @@ class RuntimeNavigatorTool(Tool):
         self.tab_delay_ms = self.config.get("tab_delay_ms", 50)
         self.expand_delay_ms = self.config.get("expand_delay_ms", 1000)
         self.initial_wait_ms = self.config.get("initial_wait_ms", 1000)
-        self.consumers: list[BaseConsumer] = self.config.get("consumers") or [FocusConsumer(), OnFocusConsumer()]
+        self.consumers: list[BaseConsumer] = self.config.get("consumers") or [
+            FocusVisibleConsumer(),
+            OnFocusConsumer(),
+        ]
 
     def execute(self, url: str, **kwargs) -> ToolResult:
         """Execute runtime navigation on the given URL."""
@@ -197,7 +200,7 @@ class RuntimeNavigatorTool(Tool):
         cur_focus_key = cur_active_element.get_focus_key()
         for _step in range(1, max_steps + 1):
             # get info of current active element
-            state.z = path
+            state.path = path
             state.prv_active_element = state.cur_active_element
             state.cur_active_element = cur_active_element
 

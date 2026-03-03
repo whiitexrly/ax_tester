@@ -72,6 +72,7 @@ class OnFocusConsumer(BaseConsumer):
                 confidence="high",
                 html_snippet=current.element_out_html or "",
                 fix="Remove side effects from focus handlers and require explicit activation (Enter/Space/click).",
+                image_url_or_path=None,
             ).model_dump()
 
         # url change from focus alone is unexpected context change
@@ -85,6 +86,7 @@ class OnFocusConsumer(BaseConsumer):
                 confidence="high",
                 html_snippet=current.element_out_html or "",
                 fix="Do not trigger navigation on focus; trigger changes only after explicit user action.",
+                image_url_or_path=None,
             ).model_dump()
 
         # title jump may indicate large in-page context switch
@@ -98,6 +100,7 @@ class OnFocusConsumer(BaseConsumer):
                 confidence="medium",
                 html_snippet=current.element_out_html or "",
                 fix="Avoid context changes on focus; update content only after explicit confirmation.",
+                image_url_or_path=None,
             ).model_dump()
 
         return None
@@ -122,6 +125,7 @@ class OnFocusConsumer(BaseConsumer):
                 confidence="high",
                 html_snippet=current.element_out_html or "",
                 fix="Keep focus on the control that expanded content; do not move focus automatically on Space.",
+                image_url_or_path=None,
             ).model_dump()
 
         if transition_key == NavigationCommand.ESCAPE:
@@ -134,6 +138,7 @@ class OnFocusConsumer(BaseConsumer):
                 confidence="high",
                 html_snippet=current.element_out_html or "",
                 fix="On Escape, restore focus to the control that opened the expandable region/dialog.",
+                image_url_or_path=None,
             ).model_dump()
 
         return None

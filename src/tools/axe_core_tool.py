@@ -228,6 +228,7 @@ class AxeCoreTool(Tool):
                     confidence="high",
                     html_snippet=snippet.replace("\\n", " "),
                     fix=v.get("help") or v.get("helpUrl") or "",
+                    image_url_or_path=None,
                 ).model_dump()
                 issues.append(issue)
         return issues
