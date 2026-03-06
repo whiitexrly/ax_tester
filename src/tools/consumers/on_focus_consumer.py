@@ -1,9 +1,15 @@
+import logging
 from typing import Any
 
 from common import ContextKey
 from schemas import Issue
 from tools.base import ActiveElementInfo, NavigationCommand, NavigatorState
 from tools.consumers.base import BaseConsumer
+from utils.wcag_helper import get_rule_name_from_axe_tags
+
+logger = logging.getLogger(__name__)
+
+WCAG_RULE = get_rule_name_from_axe_tags(["wcag321"])
 
 
 class OnFocusConsumer(BaseConsumer):
@@ -65,7 +71,7 @@ class OnFocusConsumer(BaseConsumer):
         if prev_pages is not None and cur_pages is not None and cur_pages > prev_pages:
             return Issue(
                 id=f"on-focus-new-window-{current.backend_dom_node_id or 'unknown'}-{self._steps}",
-                wcag_rule="3.2.1 - On Focus (Level A)",
+                wcag_rule=WCAG_RULE,
                 description="Focusing this element opens a new window/tab without explicit user activation.",
                 severity="critical",
                 source="llm/on_focus_analyzer",
@@ -79,7 +85,7 @@ class OnFocusConsumer(BaseConsumer):
         if prev_url and cur_url and prev_url != cur_url:
             return Issue(
                 id=f"on-focus-url-change-{current.backend_dom_node_id or 'unknown'}-{self._steps}",
-                wcag_rule="3.2.1 - On Focus (Level A)",
+                wcag_rule=WCAG_RULE,
                 description="Focusing this element changes the page URL/context unexpectedly.",
                 severity="serious",
                 source="llm/on_focus_analyzer",
@@ -93,7 +99,7 @@ class OnFocusConsumer(BaseConsumer):
         if prev_url == cur_url and prev_title and cur_title and prev_title != cur_title:
             return Issue(
                 id=f"on-focus-title-change-{current.backend_dom_node_id or 'unknown'}-{self._steps}",
-                wcag_rule="3.2.1 - On Focus (Level A)",
+                wcag_rule=WCAG_RULE,
                 description="Focusing this element causes a significant context/title change.",
                 severity="moderate",
                 source="llm/on_focus_analyzer",
@@ -118,7 +124,7 @@ class OnFocusConsumer(BaseConsumer):
         if transition_key == NavigationCommand.SPACE:
             return Issue(
                 id=f"on-focus-space-move-{current.backend_dom_node_id or 'unknown'}-{self._steps}",
-                wcag_rule="3.2.1 - On Focus (Level A)",
+                wcag_rule=WCAG_RULE,
                 description="Pressing Space on an expandable moved focus away from the triggering element.",
                 severity="serious",
                 source="llm/on_focus_analyzer",
@@ -131,7 +137,7 @@ class OnFocusConsumer(BaseConsumer):
         if transition_key == NavigationCommand.ESCAPE:
             return Issue(
                 id=f"on-focus-escape-not-return-root-{current.backend_dom_node_id or 'unknown'}-{self._steps}",
-                wcag_rule="3.2.1 - On Focus (Level A)",
+                wcag_rule=WCAG_RULE,
                 description="Pressing Escape did not return focus to the root element that opened the expandable content.",
                 severity="serious",
                 source="llm/on_focus_analyzer",

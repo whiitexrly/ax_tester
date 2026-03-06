@@ -8,8 +8,11 @@ from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
 from tools.image_captioner import ImageCaptioner
 from tools.image_extractor import ImageExtractor
 from utils.llm_helper import call_llm
+from utils.wcag_helper import get_rule_name_from_axe_tags
 
 logger = logging.getLogger(__name__)
+
+WCAG_RULE = get_rule_name_from_axe_tags(["wcag111"])
 
 SIMILARITY_PROMPT = """
     You compare alt text and generated captions for the same image.
@@ -88,7 +91,7 @@ class ImageAnalyzerTool(Tool):
                 if not sim:
                     issue = Issue(
                         id=f"image-alt-mismatch-{idx}",
-                        wcag_rule="1.1.1 - Non-text Content (Level A)",
+                        wcag_rule=WCAG_RULE,
                         description="Missing alt text"
                         if not img.get("alt_text")
                         else "Alt text and caption do not match for image",

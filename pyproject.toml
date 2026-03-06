@@ -10,7 +10,9 @@ dependencies = [
   "playwright==1.58.0",
   "beautifulsoup4==4.14.3",
   "cairosvg==2.8.2",
-  "ruff==0.15.1"
+  "ruff==0.15.1",
+  "pandas==3.0.1",
+  "openpyxl==3.1.5"
 ]
 
 [build-system]

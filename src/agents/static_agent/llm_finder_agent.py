@@ -47,6 +47,7 @@ def get_finder_instruction(tool_context: ToolContext) -> str:
         Each issue must include:
         - id, wcag_rule, description, severity, source, confidence, html_snippet, fix, image_url_or_path
         - Set image_url_or_path to null when not available.
+        - wcag_rule must be one of the allowed values from schema; if unsure use "best-practice"
 
         Severity: critical (blocks functionality) | serious (major impairment) | moderate (inconvenience) | minor (best practice)
 

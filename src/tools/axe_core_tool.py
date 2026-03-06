@@ -18,6 +18,7 @@ from playwright.async_api import async_playwright
 
 from schemas import Issue
 from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
+from utils.wcag_helper import get_rule_name_from_axe_tags
 
 logger = logging.getLogger(__name__)
 
@@ -212,9 +213,9 @@ class AxeCoreTool(Tool):
     def _map_violations_to_issues(self, violations: list[dict[str, Any]]) -> list[dict[str, Any]]:
         issues: list[dict[str, Any]] = []
         for v in violations:
-            wcag = v.get("id") or ""
             description = v.get("description") or v.get("help") or ""
             impact = v.get("impact") or "moderate"
+            wcag = get_rule_name_from_axe_tags(v.get("tags", []))
             for idx, node in enumerate(v.get("nodes", [])):
                 snippet = node.get("html") or ""
                 target = node.get("target") or []

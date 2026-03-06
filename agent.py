@@ -12,6 +12,7 @@ from agents.navigation_agent import navigator_agent
 from agents.semantic_agent import image_analyzer_agent
 from agents.static_agent import static_analysis_agent
 from common import MODEL, ContextKey
+from utils.report_excel import build_excel_report
 
 
 def run_save(tool_context: ToolContext):
@@ -24,18 +25,26 @@ def run_save(tool_context: ToolContext):
     results_dir = f"ax_tester/results/{date_str}"
     os.makedirs(results_dir, exist_ok=True)
 
-    for report in [
+    report_names = [
         ContextKey.STATIC_REPORT,
         ContextKey.IMAGE_ANALYZER_REPORT,
         ContextKey.FOCUS_VISIBLE_REPORT,
         ContextKey.ON_FOCUS_REPORT,
-    ]:
+    ]
+
+    for report in report_names:
         with open(f"{results_dir}/{report.lower()}.json", "w") as f:
             json.dump(tool_context.state.get(report), f, indent=2, ensure_ascii=False)
 
+    build_excel_report(results_dir, report_names)
+
 
 saver = LlmAgent(
-    name="Saver", model=MODEL, description="use tool `save_results` to save data in file", tools=[run_save]
+    name="Saver",
+    model=MODEL,
+    description="Use tool `run_save`.",
+    instruction="Use tool `run_save`.",
+    tools=[run_save],
 )
 
 root_agent = SequentialAgent(

@@ -8,8 +8,11 @@ from schemas import Issue
 from tools.base import NavigatorState
 from tools.consumers.base import BaseConsumer
 from utils.llm_helper import call_llm
+from utils.wcag_helper import get_rule_name_from_axe_tags
 
 logger = logging.getLogger(__name__)
+
+WCAG_RULE = get_rule_name_from_axe_tags(["wcag247"])
 
 FOCUS_VISIBILITY_PROMPT = """
     You check keyboard focus visibility for images.
@@ -77,6 +80,8 @@ class FocusVisibleConsumer(BaseConsumer):
 
     def finalize(self) -> dict[str, Any]:
         """Run LLM analysis and build issues."""
+        logger.info(f"Start finalization of {self.__class__.__name__} consumer")
+
         if not self._items:
             return {
                 "name": self.name,
@@ -184,7 +189,7 @@ class FocusVisibleConsumer(BaseConsumer):
                 index = item.get("index")
                 issue = Issue(
                     id=f"focus-visible-image-{index}",
-                    wcag_rule="2.4.7 - Focus Visible (Level AA)",
+                    wcag_rule=WCAG_RULE,
                     description="Focused image lacks a visible focus indicator",
                     html_snippet=item.get("html_snippet", ""),
                     severity="serious",

@@ -23,7 +23,8 @@ def analyze_runtime_navigation(
     result: dict = (
         RuntimeNavigatorTool(
             {
-                "headless": headless,
+                # "headless": headless,
+                "headless": False,
                 "max_steps": max_steps,
             }
         )
