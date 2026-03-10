@@ -44,6 +44,6 @@ def run_axe_core(
 axe_agent = LlmAgent(
     name="RunAxeAgent",
     model=MODEL,
-    instruction=("Run axe-core for the target URL. Call run_axe_core once and return a brief confirmation."),
+    instruction="Run axe-core for the target URL. Call `run_axe_core` once and return a brief confirmation.",
     tools=[run_axe_core],
 )

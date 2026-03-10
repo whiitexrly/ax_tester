@@ -10,6 +10,7 @@ SourceType = Literal[
     "llm/image-analyzer",
     "llm/focus_visible_analyzer",
     "llm/on_focus_analyzer",
+    "llm/no_keyboard_trap",
 ]
 ConfidenceLevel = Literal["high", "medium", "low"]
 WcagRule = Literal[

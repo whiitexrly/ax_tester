@@ -47,6 +47,7 @@ class NavigatorState:
     path: list[NavigationCommand]
 
     # element info
+    root_element: ActiveElementInfo | None
     prv_active_element: ActiveElementInfo | None
     cur_active_element: ActiveElementInfo | None
 

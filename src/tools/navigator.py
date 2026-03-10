@@ -28,7 +28,7 @@ from tools.base import (
     ToolResult,
     ToolStatus,
 )
-from tools.consumers import BaseConsumer, FocusVisibleConsumer, OnFocusConsumer
+from tools.consumers import BaseConsumer, FocusVisibleConsumer, NoKeyboardTrapConsumer, OnFocusConsumer
 from utils.cdp_helper import get_ax_info_cdp, get_backend_dom_node_id
 from utils.screenshots import get_element_screenshot, get_page_screenshot
 
@@ -50,6 +50,7 @@ class RuntimeNavigatorTool(Tool):
         self.consumers: list[BaseConsumer] = self.config.get("consumers") or [
             FocusVisibleConsumer(),
             OnFocusConsumer(),
+            NoKeyboardTrapConsumer(),
         ]
 
     def execute(self, url: str, **kwargs) -> ToolResult:
@@ -155,6 +156,7 @@ class RuntimeNavigatorTool(Tool):
                     expand_delay_ms=expand_delay_ms,
                     prev_state=NavigatorState(
                         path=[],
+                        root_element=None,
                         prv_active_element=None,
                         cur_active_element=None,
                     ),
@@ -187,10 +189,12 @@ class RuntimeNavigatorTool(Tool):
         expand_delay_ms: int,
         prev_state: NavigatorState,
         stop_key: str,
+        **kwargs,
     ):
         path = prev_state.path.copy()
         state = NavigatorState(
             path=path,
+            root_element=prev_state.cur_active_element,
             prv_active_element=prev_state.prv_active_element,
             cur_active_element=prev_state.cur_active_element,
         )
@@ -205,7 +209,7 @@ class RuntimeNavigatorTool(Tool):
             state.cur_active_element = cur_active_element
 
             # consume current state
-            self._consume_state(state)
+            self._consume_state(state, **kwargs)
 
             expanded_value = self._get_expanded_value(cur_active_element.element_ax_info or {})
 
@@ -219,33 +223,19 @@ class RuntimeNavigatorTool(Tool):
                 await self._only_press_key(page, NavigationCommand.SHIFT_TAB, tab_delay_ms, expand_delay_ms)
 
                 # expand and navigate inside expandable
-                root_focus_key = cur_active_element.get_focus_key()
+                new_root_focus_key = cur_active_element.get_focus_key()
                 await self._press_key(page, NavigationCommand.SPACE, path, tab_delay_ms, expand_delay_ms)
-                self._consume_state(
-                    NavigatorState(
-                        path=path,
-                        cur_active_element=await self._capture_active_element(page, cdp),
-                        prv_active_element=None,
-                    ),
-                    root_focus_key=root_focus_key,
-                )
-
-                # navigate inside subtree
                 await self._navigate_recursive_subtree(
-                    page, cdp, max_steps, tab_delay_ms, expand_delay_ms, state, nxt_stop_key
+                    page=page,
+                    cdp=cdp,
+                    max_steps=max_steps,
+                    tab_delay_ms=tab_delay_ms,
+                    expand_delay_ms=expand_delay_ms,
+                    prev_state=state,
+                    stop_key=nxt_stop_key,
+                    root_focus_key=new_root_focus_key,
                 )
 
-                # return to current state
-                await self._press_key(page, NavigationCommand.ESCAPE, path, tab_delay_ms, expand_delay_ms)
-                self._consume_state(
-                    NavigatorState(
-                        path=path,
-                        cur_active_element=await self._capture_active_element(page, cdp),
-                        prv_active_element=None,
-                    ),
-                    root_focus_key=root_focus_key,
-                )
-                path.pop()  # pop last escape added
                 path.pop()  # pop last space added
 
             # try to move on, if it's not a stop
@@ -253,8 +243,19 @@ class RuntimeNavigatorTool(Tool):
             cur_active_element = await self._capture_active_element(page, cdp)
             cur_focus_key = cur_active_element.get_focus_key()
 
+            # return to previous element, escape and consume state
             if cur_focus_key == stop_key:
-                await self._only_press_key(page, NavigationCommand.SHIFT_TAB, tab_delay_ms, expand_delay_ms)
+                await self._press_key(page, NavigationCommand.SHIFT_TAB, path, tab_delay_ms, expand_delay_ms)
+                await self._press_key(page, NavigationCommand.ESCAPE, path, tab_delay_ms, expand_delay_ms)
+                self._consume_state(
+                    NavigatorState(
+                        path=path,
+                        root_element=state.root_element,
+                        prv_active_element=state.cur_active_element,
+                        cur_active_element=await self._capture_active_element(page, cdp),
+                    ),
+                    root_focus_key=kwargs.get("root_focus_key"),
+                )
                 return
 
     async def _capture_active_element(self, page: Page, cdp: CDPSession) -> ActiveElementInfo | None:

@@ -30,6 +30,7 @@ def run_save(tool_context: ToolContext):
         ContextKey.IMAGE_ANALYZER_REPORT,
         ContextKey.FOCUS_VISIBLE_REPORT,
         ContextKey.ON_FOCUS_REPORT,
+        ContextKey.NO_KEYBOARD_TRAP_REPORT,
     ]
 
     for report in report_names:
@@ -42,14 +43,14 @@ def run_save(tool_context: ToolContext):
 saver = LlmAgent(
     name="Saver",
     model=MODEL,
-    description="Use tool `run_save`.",
+    description="Save results in local repository",
     instruction="Use tool `run_save`.",
     tools=[run_save],
 )
 
 root_agent = SequentialAgent(
     name="AccessibilityAgent",
-    description="Performs static and semantic analysis on a web page, given an URL",
+    description="Performs static, semantic and dynamic analysis on a web page, given an URL",
     sub_agents=[
         static_analysis_agent,
         image_analyzer_agent,
