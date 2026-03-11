@@ -1,5 +1,4 @@
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -19,13 +18,15 @@ ISSUE_COLUMNS = [
     "image_url_or_path",
 ]
 LEVEL_ORDER = {"A": 0, "AA": 1, "AAA": 2}
+REPORT_FILENAME = "report.json"
 
 
-def build_excel_report(results_dir: str, report_names: list[str]) -> str:
+def build_excel_report(results_dir: str) -> str:
     if not results_dir:
         raise ValueError("results_dir not found in tool_context.state. Run save first.")
 
-    all_issues = _load_all_issues(results_dir, report_names)
+    report = _load_report(results_dir)
+    all_issues = _extract_issue_list(report)
     all_issues_df = _build_all_issues_df(all_issues)
     wcag_summary_df = _build_wcag_summary(all_issues_df)
     level_summary_df = _build_level_summary(all_issues)
@@ -138,28 +139,30 @@ def _format_workbook(writer: pd.ExcelWriter) -> None:
             ws.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 70)
 
 
-def _load_all_issues(results_dir: str, report_names: list[str]) -> list[dict[str, Any]]:
+def _load_report(results_dir: str) -> dict[str, Any]:
+    report_path = Path(results_dir) / REPORT_FILENAME
+    if not report_path.exists():
+        raise FileNotFoundError(f"Missing report file: {report_path}")
+
+    with open(report_path, encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid report format in {report_path}: expected JSON object")
+    return data
+
+
+def _extract_issue_list(report: dict[str, Any]) -> list[dict[str, Any]]:
+    issue_list = report.get("issue_list", [])
     all_issues: list[dict[str, Any]] = []
-    for report_name in report_names:
-        file_path = f"{results_dir}/{report_name.lower()}.json"
-        if not os.path.exists(file_path):
-            continue
-        with open(file_path, encoding="utf-8") as f:
-            data = json.load(f)
-        issue_list = data.get("issue_list", [])
-        if isinstance(issue_list, list):
-            all_issues.extend(issue_list)
+    if not isinstance(issue_list, list):
+        return all_issues
+
+    for issue in issue_list:
+        if isinstance(issue, dict):
+            all_issues.append(issue)
     return all_issues
 
 
 if __name__ == "__main__":
-    from common import ContextKey
-
     results_dir = "/home/pbianco/ax_tester/results/2026-03-04_16-12-05"
-    report_names = [
-        ContextKey.STATIC_REPORT,
-        ContextKey.IMAGE_ANALYZER_REPORT,
-        ContextKey.FOCUS_VISIBLE_REPORT,
-        ContextKey.ON_FOCUS_REPORT,
-    ]
-    build_excel_report(results_dir, report_names)
+    build_excel_report(results_dir)

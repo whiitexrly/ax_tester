@@ -12,7 +12,9 @@ dependencies = [
   "cairosvg==2.8.2",
   "ruff==0.15.1",
   "pandas==3.0.1",
-  "openpyxl==3.1.5"
+  "openpyxl==3.1.5",
+  "python-pptx==1.0.2",
+  "PyMuPDF==1.26.5"
 ]
 
 [build-system]
@@ -21,10 +23,18 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["agents*", "common*", "tools*", "utils*", "schemas*"]
+include = ["agents*", "common*", "tools*", "utils*", "schemas*", "assets*"]
+
+[tool.setuptools.package-data]
+assets = ["templates/*"]
+
+[tool.ax_tester]
+assets_dir = "src/assets"
+templates_dir = "src/assets/templates"
 
 [tool.ruff]
 line-length = 113

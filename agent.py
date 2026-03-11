@@ -13,10 +13,10 @@ from agents.semantic_agent import image_analyzer_agent
 from agents.static_agent import static_analysis_agent
 from common import MODEL, ContextKey
 from utils.report_excel import build_excel_report
+from utils.report_pptx import build_pptx_report
 
 
 def run_save(tool_context: ToolContext):
-
     import json
     import os
     from datetime import datetime
@@ -33,11 +33,27 @@ def run_save(tool_context: ToolContext):
         ContextKey.NO_KEYBOARD_TRAP_REPORT,
     ]
 
-    for report in report_names:
-        with open(f"{results_dir}/{report.lower()}.json", "w") as f:
-            json.dump(tool_context.state.get(report), f, indent=2, ensure_ascii=False)
+    all_issues: list[dict] = []
+    for report_name in report_names:
+        report_data = tool_context.state.get(report_name, {})
+        issue_list = report_data.get("issue_list", []) if isinstance(report_data, dict) else []
+        all_issues.extend(issue_list)
 
-    build_excel_report(results_dir, report_names)
+        with open(f"{results_dir}/{report_name.lower()}.json", "w", encoding="utf-8") as file:
+            json.dump(report_data, file, indent=2, ensure_ascii=False)
+
+    aggregate_report = {
+        "tool_name": "ax_tester",
+        "total_issues": len(all_issues),
+        "page": tool_context.state.get(ContextKey.STATIC_REPORT, {}).get("page", ""),
+        "issue_list": all_issues,
+        "metadata": [],
+    }
+    with open(f"{results_dir}/report.json", "w", encoding="utf-8") as file:
+        json.dump(aggregate_report, file, indent=2, ensure_ascii=False)
+
+    build_excel_report(results_dir)
+    build_pptx_report(results_dir)
 
 
 saver = LlmAgent(

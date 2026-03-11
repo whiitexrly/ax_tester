@@ -37,7 +37,7 @@ FOCUS_VISIBILITY_PROMPT = """
 class FocusVisibleConsumer(BaseConsumer):
     """Analyze focus visibility using navigator states."""
 
-    name = "focus-consumer"
+    name = "focus-visible-consumer"
     report_key = ContextKey.FOCUS_VISIBLE_REPORT
 
     def __init__(
