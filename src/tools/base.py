@@ -5,16 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-
-@dataclass
-class NavigationCommand(StrEnum):
-    """Command usable for navigation"""
-
-    TAB = "Tab"
-    SHIFT_TAB = "Shift+Tab"
-    SPACE = "Space"
-    ENTER = "Enter"
-    ESCAPE = "Escape"
+from utils.browser_session import NavigationCommand
 
 
 @dataclass
@@ -32,8 +23,8 @@ class ActiveElementInfo:
     def get_focus_key(self) -> str:
         backend_id = self.backend_dom_node_id
         if backend_id is not None:
-            return f"id:{backend_id}"
-        return f"html:{self.element_html_tag}:{self.element_out_html}"
+            return f"url:{self.page_url}:id:{backend_id}"
+        return f"url:{self.page_url}:html:{self.element_html_tag}:{self.element_out_html}"
 
 
 @dataclass
@@ -113,11 +104,10 @@ class Tool(ABC):
         self.name = self.__class__.__name__
 
     @abstractmethod
-    def execute(self, url: str, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs) -> ToolResult:
         """Execute the accessibility test
 
         Args:
-            url: Target URL to test
             **kwargs: Tool-specific parameters
 
         Returns:

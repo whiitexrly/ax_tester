@@ -1,5 +1,4 @@
-"""
-Script for automating creation of .pptx file for presentation and demo session.
+"""Script for automating creation of .pptx file for presentation and demo session.
 
 This file is fully built in vibe-coding.
 """
@@ -34,7 +33,7 @@ STATUS_ERROR_SYMBOL = "✗"
 FIRSTSLIDE_TEMPLATE_FILENAME = "template_firstslide.pdf"
 THANKYOU_TEMPLATE_FILENAME = "template_thankyou.pdf"
 TEMPLATE_LOGO_FILENAME = "template_logo.png"
-REPORT_FILENAME = "report.json"
+REPORT_FILENAME = "ax_report.json"
 LOGO_WIDTH_IN = 0.68
 LOGO_MARGIN_IN = 0.16
 SLIDE_WIDTH_16_9_IN = 13.333

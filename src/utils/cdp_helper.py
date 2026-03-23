@@ -58,6 +58,7 @@ async def get_ax_info_cdp(cdp: CDPSession, element: ElementHandle) -> dict[str, 
         >>> handle = await page.evaluate_handle("() => document.activeElement")
         >>> element = handle.as_element()
         >>> ax_info = get_ax_info_cdp(cdp, element)
+
     """
     tmp_key = "__pw_ax_113"
     object_id: str | None = None

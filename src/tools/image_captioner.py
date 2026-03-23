@@ -45,9 +45,7 @@ class ImageCaptioner(Tool):
         self.max_image_bytes = self.config.get("max_image_bytes", 5_000_000)
 
     def execute(self, images_input: list[dict], **kwargs) -> ToolResult:
-        logger.info(
-            f"Generating captions for {len(images_input)} images with model={self.model}, temperature={self.temperature}, max_images_per_batch={self.max_images_per_batch}, max_prompt_chars={self.max_prompt_chars}"
-        )
+        logger.info(f"Generating captions for {len(images_input)} images with model={self.model}")
 
         try:
             page_url = kwargs.get("page_url", "")
@@ -254,9 +252,8 @@ class ImageCaptioner(Tool):
 
 # sample usage for testing/debugging
 if __name__ == "__main__":
+    import asyncio
     import sys
-
-    logging.basicConfig(level=logging.INFO)
 
     # single test
     page_url = "https://shop.reply.com"
@@ -278,12 +275,22 @@ if __name__ == "__main__":
 
     # default_url = "https://apple.com"
     default_url = "https://shop.reply.com"
-    url = "https://shop.reply.com" if len(sys.argv) < 2 else sys.argv[1]
+    test_url = "https://shop.reply.com" if len(sys.argv) < 2 else sys.argv[1]
 
     from tools.image_extractor import ImageExtractor
+    from utils.browser_session import BROWSER_SESSION
 
-    extracted = ImageExtractor().execute(url).data
-    print(f"Extracted {len(extracted['images'])} images")
-    result = ImageCaptioner().execute(extracted["images"], page_url=extracted.get("page_url", ""))
+    async def _run() -> None:
+        url = test_url if test_url.startswith(("http://", "https://")) else f"https://{test_url}"
+        await BROWSER_SESSION.create_session()
+        await BROWSER_SESSION.goto(url)
+        try:
+            extracted = (await ImageExtractor().execute()).data
+        finally:
+            await BROWSER_SESSION.close_session()
 
-    print(json.dumps(result.data, indent=2))
+        print(f"Extracted {len(extracted['images'])} images")
+        result = ImageCaptioner().execute(extracted["images"], page_url=extracted.get("page_url", ""))
+        print(json.dumps(result.data, indent=2))
+
+    asyncio.run(_run())

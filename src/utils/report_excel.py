@@ -18,7 +18,7 @@ ISSUE_COLUMNS = [
     "image_url_or_path",
 ]
 LEVEL_ORDER = {"A": 0, "AA": 1, "AAA": 2}
-REPORT_FILENAME = "report.json"
+REPORT_FILENAME = "ax_report.json"
 
 
 def build_excel_report(results_dir: str) -> str:

@@ -3,8 +3,9 @@ from typing import Any
 
 from common import ContextKey
 from schemas import Issue
-from tools.base import ActiveElementInfo, NavigationCommand, NavigatorState
+from tools.base import ActiveElementInfo, NavigatorState
 from tools.consumers.base import BaseConsumer
+from utils.browser_session import NavigationCommand
 from utils.wcag_helper import get_rule_name_from_axe_tags
 
 logger = logging.getLogger(__name__)
@@ -32,9 +33,9 @@ class OnFocusConsumer(BaseConsumer):
 
         issue: dict[str, Any] | None = None
         if len(state.path) != 0:
-            transition_key = state.path[-1]
+            transition_key: NavigationCommand = state.path[-1]
         else:
-            transition_key = None
+            transition_key: NavigationCommand = None
 
         if transition_key.value in (NavigationCommand.TAB, NavigationCommand.SHIFT_TAB):
             issue = self._build_issue_tab(previous, current)

@@ -5,8 +5,9 @@ from typing import Any
 
 from common import MODEL_NAME, ContextKey
 from schemas import Issue
-from tools.base import ActiveElementInfo, NavigationCommand, NavigatorState
+from tools.base import ActiveElementInfo, NavigatorState
 from tools.consumers.base import BaseConsumer
+from utils.browser_session import NavigationCommand
 from utils.llm_helper import call_llm
 from utils.wcag_helper import get_rule_name_from_axe_tags
 
@@ -162,18 +163,25 @@ class NoKeyboardTrapConsumer(BaseConsumer):
 
 
 if __name__ == "__main__":
+    import asyncio
     import json
     import sys
 
     from tools import RuntimeNavigatorTool
+    from utils.browser_session import BROWSER_SESSION
 
     default_url = "https://shop.reply.com"
     # default_url = "https://apple.com"
     test_url = default_url if len(sys.argv) < 2 else sys.argv[1]
 
-    result = (
-        RuntimeNavigatorTool({"consumers": [NoKeyboardTrapConsumer()], "headless": False})
-        .execute(test_url)
-        .to_dict()
-    )
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+    async def _run() -> None:
+        url = test_url if test_url.startswith(("http://", "https://")) else f"https://{test_url}"
+        await BROWSER_SESSION.create_session()
+        await BROWSER_SESSION.goto(url)
+        try:
+            result = (await RuntimeNavigatorTool({"consumers": [NoKeyboardTrapConsumer()]}).execute()).to_dict()
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        finally:
+            await BROWSER_SESSION.close_session()
+
+    asyncio.run(_run())

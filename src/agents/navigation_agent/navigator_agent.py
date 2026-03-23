@@ -4,33 +4,17 @@ from google.adk.tools.tool_context import ToolContext
 from common import MODEL
 from schemas import Report
 from tools import RuntimeNavigatorTool
-
-RUNTIME_NAVIGATOR_INSTRUCTIONS = """
-    Run the tool analyze_runtime_navigation with a URL to perform runtime navigation.
-    Store each consumer report in tool_context.state under its own report key.
-    Return a brief confirmation message with the number of issues found by consumers.
-"""
+from tools.base import ToolResult
 
 
-def analyze_runtime_navigation(
+async def analyze_runtime_navigation(
     tool_context: ToolContext,
-    url: str,
-    headless: bool = True,
     max_steps: int = 200,
 ) -> dict:
-    """Run runtime navigation and store results in agent state."""
-
-    result: dict = (
-        RuntimeNavigatorTool(
-            {
-                # "headless": headless,
-                "headless": False,
-                "max_steps": max_steps,
-            }
-        )
-        .execute(url)
-        .to_dict()
-    )
+    """Run runtime navigation on the current page and store results in agent state."""
+    raw_result: ToolResult = await RuntimeNavigatorTool({"max_steps": max_steps}).execute()
+    result: dict = raw_result.to_dict()
+    page_url = result.get("data", {}).get("page_url", "")
 
     consumer_results = result.get("data", {}).get("consumer_results", []) or []
     updated_keys = []
@@ -43,7 +27,7 @@ def analyze_runtime_navigation(
                 "tool_name": consumer_result.get("result", {}).get("name"),
                 "issue_list": consumer_result.get("result", {}).get("issue_list"),
                 "total_issues": len(consumer_result.get("result", {}).get("issue_list")),
-                "page": url,
+                "page": page_url,
                 "metadata": [
                     {"key": "checked", "value": consumer_result.get("result").get("checked")},
                 ],
@@ -55,14 +39,14 @@ def analyze_runtime_navigation(
 
     return {
         "status": "success" if result["status"] == "success" else "failure",
-        "message": f"Runtime navigation completed on {url}. Updated reports: {updated_keys}.",
+        "message": f"Runtime navigation completed on {page_url}. Updated reports: {updated_keys}.",
     }
 
 
 navigator_agent = LlmAgent(
-    name="RuntimeNavigator",
+    name="RuntimeNavigatorAgent",
     model=MODEL,
     description="Runs runtime navigation and aggregates consumer findings.",
-    instruction=RUNTIME_NAVIGATOR_INSTRUCTIONS,
+    instruction="Call `analyze_runtime_navigation` once and return a brief confirmation.",
     tools=[analyze_runtime_navigation],
 )

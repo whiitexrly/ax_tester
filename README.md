@@ -1,6 +1,26 @@
 # Accessibility Tester
 AI agent capable of testing the accessibility (also referred to as a11y or ax) of web pages.
 
+## Browser Session (`BROWSER_SESSION`)
+
+The project uses a shared singleton session defined in [`src/utils/browser_session.py`](src/utils/browser_session.py):
+- one Playwright browser/context/page per run
+- one source of truth for the current page used by agents/tools
+- centralized keyboard actions (`press_key`) and navigation (`goto`)
+
+### Runtime lifecycle
+
+1. Initialize session once with root tool `initialize_session`.
+2. Navigate with root tool `navigate_to_page`.
+3. Run analysis tools/agents on the current page in `BROWSER_SESSION`.
+
+### Tool contract
+
+- Tools must reuse `BROWSER_SESSION.page` and must not create a new browser/context/page.
+- Runtime tools must not navigate again to the same URL internally.
+- Runtime tools should not require `url` input when they operate on the current page.
+- Keyboard press timing logic is centralized in `BROWSER_SESSION.press_key`.
+
 ## Unified Report Schema
 
 All final reports use the same `Report` schema:

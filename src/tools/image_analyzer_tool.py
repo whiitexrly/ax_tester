@@ -47,37 +47,37 @@ class ImageAnalyzerTool(Tool):
         self.captioner = ImageCaptioner(captioner_config)
         self.model = self.captioner.model
 
-    def execute(self, url: str, **kwargs) -> ToolResult:
-        logger.info(
-            f"Analyzing images on {url} with extractor_config={self.extractor.config}, captioner_config={self.captioner.config}, temperature={self.temperature}, max_items_per_batch={self.max_items_per_batch}"
-        )
+    async def execute(self, **kwargs) -> ToolResult:
+        logger.info("Analyzing images on current page")
 
+        page_url = ""
         try:
             extractor_kwargs = kwargs.get("extractor_kwargs", {})
             captioner_kwargs = kwargs.get("captioner_kwargs", {})
 
-            # extract images from the page
-            extracted = self.extractor.execute(url, **extractor_kwargs)
+            # extract images from the current page
+            extracted: ToolResult = await self.extractor.execute(**extractor_kwargs)
+            page_url = extracted.data.get("page_url", "")
             if not extracted.is_success():
                 return ToolResult(
                     tool_name="image-analyzer",
                     status=ToolStatus.FAILURE,
                     data={},
                     error=extracted.error or "image_extractor_failed",
-                    metadata=extracted.metadata or {"url": url},
+                    metadata=extracted.metadata or {"url": page_url},
                 )
 
             images = extracted.data.get("images", [])
 
             # generate caption for extracted images
-            captions_result = self.captioner.execute(images, page_url=url, **captioner_kwargs)
+            captions_result = self.captioner.execute(images, page_url=page_url, **captioner_kwargs)
             if not captions_result.is_success():
                 return ToolResult(
                     tool_name="image-analyzer",
                     status=ToolStatus.FAILURE,
                     data={},
                     error=captions_result.error or "image_captioner_failed",
-                    metadata=captions_result.metadata or {"url": url},
+                    metadata=captions_result.metadata or {"url": page_url},
                 )
 
             captioned_images = captions_result.data.get("images", [])
@@ -108,12 +108,12 @@ class ImageAnalyzerTool(Tool):
                 tool_name="image-analyzer",
                 status=ToolStatus.SUCCESS,
                 data={
-                    "page": captions_result.data.get("page", url),
+                    "page": captions_result.data.get("page", page_url),
                     "issue_list": issue_list,
                     "skipped": captions_result.data.get("skipped", 0),
                     "extracted": len(images),
                 },
-                metadata={"url": url},
+                metadata={"url": page_url},
             )
 
         except ToolExecutionError:
@@ -125,7 +125,7 @@ class ImageAnalyzerTool(Tool):
                 status=ToolStatus.FAILURE,
                 data={},
                 error=str(e),
-                metadata={"url": url},
+                metadata={"url": page_url},
             )
 
     def _analyze_similarity(self, images: list[dict[str, Any]]) -> list[bool]:
@@ -206,9 +206,25 @@ class ImageAnalyzerTool(Tool):
         return []
 
 
+# integration test
 if __name__ == "__main__":
-    url = "https://shop.reply.com"
-    # url = "https://apple.com"
+    import asyncio
+    import sys
 
-    result = ImageAnalyzerTool().execute(url)
-    print(json.dumps(result.data, indent=2))
+    from utils.browser_session import BROWSER_SESSION
+
+    # default_url = "https://apple.com"
+    default_url = "https://shop.reply.com"
+    test_url = default_url if len(sys.argv) < 2 else sys.argv[1]
+
+    async def _run() -> None:
+        url = test_url if test_url.startswith(("http://", "https://")) else f"https://{test_url}"
+        await BROWSER_SESSION.create_session()
+        await BROWSER_SESSION.goto(url)
+        try:
+            result = await ImageAnalyzerTool().execute()
+            print(json.dumps(result.data, indent=2))
+        finally:
+            await BROWSER_SESSION.close_session()
+
+    asyncio.run(_run())
