@@ -7,10 +7,7 @@ from tools import RuntimeNavigatorTool
 from tools.base import ToolResult
 
 
-async def analyze_runtime_navigation(
-    tool_context: ToolContext,
-    max_steps: int = 200,
-) -> dict:
+async def analyze_runtime_navigation(tool_context: ToolContext, max_steps: int = 200) -> dict:
     """Run runtime navigation on the current page and store results in agent state."""
     raw_result: ToolResult = await RuntimeNavigatorTool({"max_steps": max_steps}).execute()
     result: dict = raw_result.to_dict()

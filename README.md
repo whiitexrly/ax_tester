@@ -140,17 +140,24 @@ The **Navigator Agent** performs runtime navigation using Playwright and emits a
 - **Producer (Navigator)**: walks focusable elements (Tab/Space), captures screenshots and AX info.
 - **Consumers**: analyze each state independently and emit WCAG issues. Each consumer specializes in one WCAG rule (or a small set of closely related ones).
 
+The default consumer set is centralized in:
+- [`build_default_navigator_consumers()`](src/tools/consumers/__init__.py)
 
 ### High-level pipeline
 
-1. **Runtime Navigator Tool** 
+0. **Runtime Navigator Tool** 
    - Navigates the page using keyboard.
    - Emits `NavigatorState` (prev/current focus context).
 
-2. **Focus Visible Consumer** (WCAG 2.4.7, Level AA)
+1. **Focus Visible Consumer** (WCAG 2.4.7, Level AA)
    - Consumes each state and collects element screenshots.
    - Uses LLM analysis to detect missing focus indicators.
    - Output: `focus_visible_report` (`Report`)
+
+2. **Link Purpose Consumer** (WCAG 2.4.4 + 2.4.9)
+   - Collects focused links (`role=link`) from AX info.
+   - Sends accessible name/description + href + HTML snippet to LLM.
+   - Output: `link_purpose_report` (`Report`)
 
 3. **On Focus Consumer** (WCAG 3.2.1, Level A)
    - Detects unexpected context changes caused by focus transitions.
@@ -160,23 +167,38 @@ The **Navigator Agent** performs runtime navigation using Playwright and emits a
      - wrong focus restore behavior after `Space` / `Escape` on expandable widgets
    - Output: `on_focus_report` (`Report`)
 
+4. **No Keyboard Trap Consumer** (WCAG 2.1.2, Level A)
+   - Triggered on `Escape` transitions after expandable/modal interactions.
+   - Uses root/before/after screenshots to verify that `Escape` closes the active modal.
+   - Flags potential keyboard traps when modal remains open.
+   - Output: `no_keyboard_trap_report` (`Report`)
+
+### Implemented Consumers
+
+| Consumer | Rule(s) | Strategy | Report key |
+|---|---|---|---|
+| `FocusVisibleConsumer` | `2.4.7` | LLM vision on focused element screenshots | `focus_visible_report` |
+| `LinkPurposeConsumer` | `2.4.4`, `2.4.9` | LLM text analysis on link AX name/description + href + snippet | `link_purpose_report` |
+| `OnFocusConsumer` | `3.2.1` | Deterministic transition checks on focus path/url/title/page count | `on_focus_report` |
+| `NoKeyboardTrapConsumer` | `2.1.2` | LLM vision check before/after `Escape` for modal close behavior | `no_keyboard_trap_report` |
 
 ```text
-                ┌──────────────────────────────┐
-                │   Runtime Navigator          │
-                │   Component                  │
-                └──────────────┬───────────────┘
+               ┌──────────────────────────────┐
+               │   Runtime Navigator          │
+               │   Component                  │
+               └───────────────┬──────────────┘
                                │
                                │ NavigatorState stream
                                v
               ┌─────────────────────────────┐
               | ┌─────────────────────────────┐
-              └─│           Consumer          │
+              └─│          Consumer           │
                 └──────────────┬──────────────┘
                                │ <name>_report
+                               │
                                v
-                      Consumer Report JSON
-                      issues[] + summary
+                    Runtime Consumer Reports
+                    (one Report per consumer)
 ```
 
 ## Installation and Usage

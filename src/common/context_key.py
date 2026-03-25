@@ -16,5 +16,16 @@ class ContextKey(StrEnum):
     STATIC_REPORT = "static_report"
     IMAGE_ANALYZER_REPORT = "image_analyzer_report"
     FOCUS_VISIBLE_REPORT = "focus_visible_report"
+    LINK_PURPOSE_REPORT = "link_purpose_report"
     ON_FOCUS_REPORT = "on_focus_report"
     NO_KEYBOARD_TRAP_REPORT = "no_keyboard_trap_report"
+
+
+FINAL_REPORT_KEYS: tuple[ContextKey, ...] = (
+    ContextKey.STATIC_REPORT,
+    ContextKey.IMAGE_ANALYZER_REPORT,
+    ContextKey.FOCUS_VISIBLE_REPORT,
+    ContextKey.LINK_PURPOSE_REPORT,
+    ContextKey.ON_FOCUS_REPORT,
+    ContextKey.NO_KEYBOARD_TRAP_REPORT,
+)

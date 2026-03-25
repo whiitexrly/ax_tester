@@ -11,7 +11,7 @@ from google.adk.tools.tool_context import ToolContext
 from agents.navigation_agent import navigator_agent
 from agents.semantic_agent import image_analyzer_agent
 from agents.static_agent import static_analysis_agent
-from common import MODEL, ContextKey
+from common import FINAL_REPORT_KEYS, MODEL, ContextKey
 from utils.browser_session import BROWSER_SESSION
 from utils.report_excel import build_excel_report
 from utils.report_pptx import build_pptx_report
@@ -78,22 +78,15 @@ def run_save(tool_context: ToolContext):
     results_dir = f"ax_tester/results/{date_str}"
     os.makedirs(results_dir, exist_ok=True)
 
-    report_names = [
-        ContextKey.STATIC_REPORT,
-        ContextKey.IMAGE_ANALYZER_REPORT,
-        ContextKey.FOCUS_VISIBLE_REPORT,
-        ContextKey.ON_FOCUS_REPORT,
-        ContextKey.NO_KEYBOARD_TRAP_REPORT,
-    ]
-
     all_issues: list[dict] = []
-    for report_name in report_names:
+    for report_name in FINAL_REPORT_KEYS:
         report_data = tool_context.state.get(report_name, {})
-        issue_list = report_data.get("issue_list", []) if isinstance(report_data, dict) else []
-        all_issues.extend(issue_list)
-
         with open(f"{results_dir}/{report_name.lower()}.json", "w", encoding="utf-8") as file:
             json.dump(report_data, file, indent=2, ensure_ascii=False)
+
+        issue_list = report_data.get("issue_list", []) if isinstance(report_data, dict) else []
+        issue_list = [issue for issue in issue_list if issue.get("severity", "") != "minor"]
+        all_issues.extend(issue_list)
 
     aggregate_report = {
         "tool_name": "ax_tester",

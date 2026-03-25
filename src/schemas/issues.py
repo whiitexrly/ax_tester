@@ -4,11 +4,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 SeverityKey = Literal["critical", "serious", "moderate", "minor"]
 SourceType = Literal[
-    "axe",
+    "axe-core",
     "llm",
     "both",
     "llm/image-analyzer",
     "llm/focus_visible_analyzer",
+    "llm/link_purpose_analyzer",
     "llm/on_focus_analyzer",
     "llm/no_keyboard_trap",
 ]

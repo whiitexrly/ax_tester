@@ -24,7 +24,7 @@ from tools.base import (
     ToolResult,
     ToolStatus,
 )
-from tools.consumers import BaseConsumer, FocusVisibleConsumer, NoKeyboardTrapConsumer, OnFocusConsumer
+from tools.consumers import BaseConsumer, build_default_navigator_consumers
 from utils.browser_session import BROWSER_SESSION, NavigationCommand
 from utils.cdp_helper import get_ax_info_cdp, get_backend_dom_node_id
 from utils.screenshots import get_element_screenshot, get_page_screenshot
@@ -41,15 +41,10 @@ class RuntimeNavigatorTool(Tool):
         self.tab_delay_ms = self.config.get("tab_delay_ms", 50)
         self.expand_delay_ms = self.config.get("expand_delay_ms", 1000)
         self.initial_wait_ms = self.config.get("initial_wait_ms", 5000)
-        self.consumers: list[BaseConsumer] = self.config.get("consumers") or [
-            FocusVisibleConsumer(),
-            OnFocusConsumer(),
-            NoKeyboardTrapConsumer(),
-        ]
+        self.consumers: list[BaseConsumer] = self.config.get("consumers") or build_default_navigator_consumers()
 
     async def execute(self, **kwargs) -> ToolResult:
         """Execute runtime navigation on the current page in `BROWSER_SESSION`."""
-
         page_url = BROWSER_SESSION.page.url if BROWSER_SESSION.is_initialized() else ""
         logger.info(f"Starting runtime navigation on current page {page_url}")
 
@@ -225,6 +220,7 @@ class RuntimeNavigatorTool(Tool):
             outer_html = await element.evaluate("el => el.outerHTML")
             outer_html = re.sub(r"\s+", " ", outer_html).strip()[:400]
             tag = await element.evaluate("el => el.tagName")
+            href = await element.evaluate("el => el.getAttribute('href')")
 
             backend_dom_node_id = await get_backend_dom_node_id(cdp, element)
             ax_info = await get_ax_info_cdp(cdp, element)
@@ -238,6 +234,7 @@ class RuntimeNavigatorTool(Tool):
                 element_ax_info=ax_info,
                 element_out_html=outer_html,
                 element_html_tag=tag,
+                element_href=href,
                 page_url=page.url,
                 page_title=await page.title(),
                 context_page_count=len(page.context.pages),

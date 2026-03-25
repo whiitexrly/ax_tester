@@ -51,6 +51,7 @@ class AxeCoreTool(Tool):
 
         Returns:
             ToolResult with axe-core violations and mapped issues
+
         """
         logger.info("Running axe-core analysis on current page")
 
@@ -145,7 +146,7 @@ class AxeCoreTool(Tool):
                     wcag_rule=wcag,
                     description=description,
                     severity=self._map_impact(impact),
-                    source="axe",
+                    source="axe-core",
                     confidence="high",
                     html_snippet=snippet.replace("\\n", " "),
                     fix=v.get("help") or v.get("helpUrl") or "",
