@@ -210,7 +210,7 @@ class ImageExtractor(Tool):
                 {
                     "type": item_type,
                     "url": url,
-                    "alt_text": item.get("alt_text"),
+                    "alt_text": item.get("alt_text", "") or "",
                     "source_selector": item.get("source_selector"),
                 }
             )

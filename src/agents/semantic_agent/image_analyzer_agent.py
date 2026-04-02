@@ -32,6 +32,7 @@ async def analyze_images_in_webpage(tool_context: ToolContext) -> dict:
                 {"key": "status", "value": raw.status.value},
                 {"key": "error", "value": raw.error or ""},
                 {"key": "skipped", "value": data.get("skipped", 0)},
+                {"key": "decorative", "value": data.get("decorative", 0)},
             ],
         }
     ).model_dump()

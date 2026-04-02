@@ -80,8 +80,15 @@ class ImageAnalyzerTool(Tool):
                     metadata=captions_result.metadata or {"url": page_url},
                 )
 
-            captioned_images = captions_result.data.get("images", [])
+            all_captioned_images = captions_result.data.get("images", [])
 
+            # remove pure decorative images
+            captioned_images = [img for img in all_captioned_images if not img.get("is_pure_decorative")]
+            for idx, img in enumerate(captioned_images):
+                img["index"] = idx
+            tot_pure_decorative = len(all_captioned_images) - len(captioned_images)
+
+            # analyze image similarity
             logger.info(f"Analyzing similarity of alt text and captions for {len(captioned_images)} images")
             similarity = self._analyze_similarity(captioned_images)
 
@@ -92,9 +99,7 @@ class ImageAnalyzerTool(Tool):
                     issue = Issue(
                         id=f"image-alt-mismatch-{idx}",
                         wcag_rule=WCAG_RULE,
-                        description="Missing alt text"
-                        if not img.get("alt_text")
-                        else "Alt text and caption do not match for image",
+                        description="Missing alt text" if not img.get("alt_text") else "Inconsistent alt text",
                         html_snippet=img.get("source_selector") or "",
                         severity="critical",
                         confidence="high",
@@ -112,6 +117,7 @@ class ImageAnalyzerTool(Tool):
                     "issue_list": issue_list,
                     "skipped": captions_result.data.get("skipped", 0),
                     "extracted": len(images),
+                    "decorative": tot_pure_decorative,
                 },
                 metadata={"url": page_url},
             )

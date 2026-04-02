@@ -16,18 +16,25 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT = """
     You are an accessibility image captioner.
-    Write short, descriptive captions suitable as alt text.
+    Write short, descriptive captions suitable as alt text, and classify decorative images per WCAG 1.1.1.
     Be specific, avoid filler, and do not mention 'image' or 'photo'.
     If text is visible, include it verbatim.
-    Return JSON ONLY as an array of objects with keys: index, caption.
+    Return JSON ONLY as an array of objects with keys: index, caption, is_pure_decorative.
+    Set is_pure_decorative to true only when the image is purely decorative:
+    - no essential information
+    - no functionality/action
+    - no meaningful text that users need
+    - only visual styling, spacing, or redundant ornament
+    Set is_pure_decorative to false for informative, functional, or text-bearing images.
+    If is_pure_decorative is true, return caption as an empty string.
     Do not add extra keys or commentary.
     Use valid JSON with double quotes.
     The index must match the number shown in the input label "Image {index}".
 
     Example output:
     [
-        {"index": 0, "caption": "Red bicycle leaning against a brick wall"},
-        {"index": 1, "caption": "Sign reads 'No Parking' in bold letters"}
+        {"index": 0, "caption": "Red bicycle leaning against a brick wall", "is_pure_decorative": false},
+        {"index": 1, "caption": "", "is_pure_decorative": true}
     ]
 """
 
@@ -210,10 +217,12 @@ class ImageCaptioner(Tool):
                     continue
                 if "index" not in item or "caption" not in item:
                     continue
+
                 normalized.append(
                     {
                         "index": item.get("index"),
                         "caption": item.get("caption"),
+                        "is_pure_decorative": self._to_bool(item.get("is_pure_decorative"), default=False),
                     }
                 )
             if normalized:
@@ -224,9 +233,23 @@ class ImageCaptioner(Tool):
             {
                 "index": img["index"],
                 "caption": img.get("alt_text") or "",
+                "is_pure_decorative": False,
             }
             for img in batch
         ]
+
+    def _to_bool(self, value: Any, default: bool = False) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes"}:
+                return True
+            if normalized in {"false", "0", "no"}:
+                return False
+        return default
 
     def _merge_with_images(
         self, images: list[dict[str, Any]], captions: list[dict[str, Any]]
@@ -234,7 +257,7 @@ class ImageCaptioner(Tool):
         merged = []
         for caption_obj in captions:
             idx = caption_obj.get("index")
-            if idx < 0 or idx >= len(images):
+            if not isinstance(idx, int) or idx < 0 or idx >= len(images):
                 continue
             img = images[idx]
             merged.append(
@@ -244,6 +267,7 @@ class ImageCaptioner(Tool):
                     "url": img.get("url"),
                     "alt_text": img.get("alt_text"),
                     "caption": caption_obj.get("caption"),
+                    "is_pure_decorative": bool(caption_obj.get("is_pure_decorative", False)),
                     "source_selector": img.get("source_selector"),
                 }
             )
