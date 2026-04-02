@@ -86,6 +86,10 @@ def run_save(tool_context: ToolContext):
 
         issue_list = report_data.get("issue_list", []) if isinstance(report_data, dict) else []
         issue_list = [issue for issue in issue_list if issue.get("severity", "") != "minor"]
+        for compliance_level in ["AAA", "AA", "A"]:
+            if tool_context.state[ContextKey.COMPLIANCE_LEVEL] == compliance_level:
+                break
+            issue_list = [issue for issue in issue_list if compliance_level not in issue.get("wcag_rule")]
         all_issues.extend(issue_list)
 
     aggregate_report = {

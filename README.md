@@ -210,6 +210,7 @@ source .venv/bin/activate
 python3 -m pip install -e .
 rm -rf src/ax_tester.egg-info/
 playwright install
+playwright install chrome
 npm i
 ```
 
@@ -230,4 +231,8 @@ This project uses **Ruff** for formatting and linting. The same checks are enfor
 
 ```bash
 ruff check --fix && ruff format
+```
+or
+```bash
+make format
 ```

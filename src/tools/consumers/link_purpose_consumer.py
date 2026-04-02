@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from typing import Any
 
@@ -8,6 +9,9 @@ from tools.base import ActiveElementInfo, NavigatorState
 from tools.consumers.base import BaseConsumer
 from utils.llm_helper import call_llm
 from utils.wcag_helper import get_rule_name_from_axe_tags
+
+logger = logging.getLogger(__name__)
+
 
 WCAG_RULE_CONTEXT = get_rule_name_from_axe_tags(["wcag244"])
 WCAG_RULE_LINK_ONLY = get_rule_name_from_axe_tags(["wcag249"])
@@ -33,7 +37,7 @@ Examples:
 - A link whose accessible name is just a raw URL -> usually fail 2.4.9 and may fail 2.4.4 if no helpful context is available.
 
 Decision guidance:
-- Use the accessible name as the primary signal.
+- Use `accessible_name` and `accessible_description` as the primary signal (role will be always `link`).
 - Treat generic names like "read more", "details", "click here", "learn more", "more", "open" as suspicious,
   but decide based on the actual evidence, not on a hardcoded rule alone.
 - HTML snippets may help when the snippet itself contains enough text to clarify the purpose.
@@ -123,15 +127,15 @@ class LinkPurposeConsumer(BaseConsumer):
         )
 
     def finalize(self) -> dict[str, Any]:
+        """Run LLM analysis and build issues."""
+        logger.info(f"Start finalization of {self.__class__.__name__} consumer")
+
         if not self._items:
             return {
                 "name": self.name,
                 "issue_list": [],
                 "checked": 0,
             }
-        import json
-
-        print(json.dumps(self._items, indent=2, ensure_ascii=False))
 
         batches = self._batch_items(self._items)
         decisions: list[dict[str, Any]] = []

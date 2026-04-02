@@ -24,6 +24,8 @@ def set_wcag_level(tool_context: ToolContext, level: str = "AA") -> dict[str, An
     if normalized not in ["A", "AA", "AAA"]:
         raise ValueError("wcag level must be one of: A, AA, AAA")
 
+    tool_context.state[ContextKey.COMPLIANCE_LEVEL] = normalized
+
     ROOT_DIR = Path(__file__).resolve().parents[2]
     with open(ROOT_DIR / "prompts" / "wcag.yml", encoding="utf-8") as f:
         wcag_data = yaml.safe_load(f)

@@ -39,7 +39,8 @@ class BrowserSession:
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch(
             headless=False,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-setuid-sandbox"],
+            channel="chrome",
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-setuid-sandbox", "--start-maximised"],
         )
         self.context = await self.browser.new_context()
         self.page = await self.context.new_page()

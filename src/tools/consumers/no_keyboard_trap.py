@@ -82,6 +82,9 @@ class NoKeyboardTrapConsumer(BaseConsumer):
             self._issues.append(issue)
 
     def finalize(self) -> dict[str, Any]:
+        """Run LLM analysis and build issues."""
+        logger.info(f"Start finalization of {self.__class__.__name__} consumer")
+
         return {
             "name": self.name,
             "issue_list": self._issues,
