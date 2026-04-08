@@ -1,7 +1,10 @@
+import logging
 from dataclasses import dataclass
 from enum import StrEnum
 
 from playwright.async_api import async_playwright
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -62,7 +65,10 @@ class BrowserSession:
         """Navigate the active page to the given URL."""
         if not self.is_initialized():
             raise RuntimeError("Browser session not initialized")
-        await self.page.goto(url, wait_until="networkidle")
+        try:
+            await self.page.goto(url, wait_until="networkidle")
+        except Exception as exc:
+            logger.error(f"Failed to navigate to page {url}, {exc}")
 
     async def refresh_page(self) -> None:
         """Reload the active page and wait for network idle."""

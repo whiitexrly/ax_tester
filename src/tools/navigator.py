@@ -103,6 +103,7 @@ class RuntimeNavigatorTool(Tool):
             start_element = await self._capture_active_element(page, cdp)
             if not start_element:
                 raise ToolExecutionError("No active element detected after initial load.")
+            self.initial_element_out_html = start_element.element_out_html
 
             await self._navigate_recursive_subtree(
                 page=page,
@@ -193,6 +194,9 @@ class RuntimeNavigatorTool(Tool):
             await self._press_key(NavigationCommand.TAB, path, tab_delay_ms, expand_delay_ms)
             cur_active_element = await self._capture_active_element(page, cdp)
             cur_focus_key = cur_active_element.get_focus_key()
+
+            if cur_active_element.element_out_html == self.initial_element_out_html:
+                return
 
             # return to previous element, escape and consume state
             if cur_focus_key == stop_key:

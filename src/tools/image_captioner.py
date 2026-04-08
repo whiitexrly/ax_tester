@@ -112,6 +112,7 @@ class ImageCaptioner(Tool):
                         "url": url,
                         "alt_text": img.get("alt_text"),
                         "source_selector": img.get("source_selector"),
+                        "outer_html": img.get("outer_html"),
                         "mime": mime,
                         "b64": b64,
                     }
@@ -269,6 +270,7 @@ class ImageCaptioner(Tool):
                     "caption": caption_obj.get("caption"),
                     "is_pure_decorative": bool(caption_obj.get("is_pure_decorative", False)),
                     "source_selector": img.get("source_selector"),
+                    "outer_html": img.get("outer_html"),
                 }
             )
         return merged

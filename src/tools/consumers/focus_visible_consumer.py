@@ -5,7 +5,7 @@ from typing import Any
 
 from common import MODEL_NAME, ContextKey
 from schemas import Issue
-from tools.base import NavigatorState
+from tools.base import ActiveElementInfo, NavigatorState
 from tools.consumers.base import BaseConsumer
 from utils.llm_helper import call_llm
 from utils.wcag_helper import get_rule_name_from_axe_tags
@@ -15,21 +15,21 @@ logger = logging.getLogger(__name__)
 WCAG_RULE = get_rule_name_from_axe_tags(["wcag247"])
 
 FOCUS_VISIBILITY_PROMPT = """
-    You check keyboard focus visibility for images.
+    You check keyboard focus visibility for all focused interactive elements.
     Each screenshot is centered on the focused element or may be not, if the element is on the border of the web page.
+    For each item you also receive AX info (role/name/states/properties) as additional context.
     Decide for each item:
-    - is_image: true if the focused element is an image or graphic content (photo, illustration, icon).
     - has_focus_indicator: true if a clear focus outline/border/box/glow surrounds the focused element.
-    Return JSON ONLY as an array of objects with keys: index, is_image, has_focus_indicator.
-    If not an image, set is_image false and has_focus_indicator false.
+    - Use screenshot as primary evidence and AX info only as supporting context.
+    Return JSON ONLY as an array of objects with keys: index, has_focus_indicator.
     If unsure, set has_focus_indicator false.
     The index must match the number shown in the input label "Item {index}".
     Do not add extra keys or commentary. Use valid JSON with double quotes.
 
     Example output:
     [
-        {"index": 0, "is_image": true, "has_focus_indicator": true},
-        {"index": 1, "is_image": false, "has_focus_indicator": false}
+        {"index": 0, "has_focus_indicator": true},
+        {"index": 1, "has_focus_indicator": false}
     ]
 """
 
@@ -58,8 +58,8 @@ class FocusVisibleConsumer(BaseConsumer):
     def consume(self, state: NavigatorState, **kwargs) -> None:
         """Collect screenshot data from the current state."""
         self._steps += 1
-        current = state.cur_active_element
-        if not current:
+        current: ActiveElementInfo | None = state.cur_active_element
+        if not current or not current.element_screenshot or current.element_html_tag.lower() == "body":
             return
 
         backend_id = current.backend_dom_node_id
@@ -74,6 +74,7 @@ class FocusVisibleConsumer(BaseConsumer):
                 "backend_dom_node_id": backend_id,
                 "mime": "image/png",
                 "b64": current.element_screenshot,
+                "ax_info": current.element_ax_info or {},
                 "html_snippet": current.element_out_html or "",
             }
         )
@@ -128,7 +129,8 @@ class FocusVisibleConsumer(BaseConsumer):
         return batches
 
     def _estimate_item_prompt_len(self, item: dict[str, Any]) -> int:
-        return len(item.get("b64") or "") + 200
+        ax_info_len = len(self._serialize_ax_info(item))
+        return len(item.get("b64") or "") + ax_info_len + 250
 
     def _analyze_batch(self, batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
         messages = self._build_messages(batch)
@@ -140,6 +142,12 @@ class FocusVisibleConsumer(BaseConsumer):
         for item in batch:
             label = f"Item {item['index']}"
             content.append({"type": "text", "text": label})
+            content.append(
+                {
+                    "type": "text",
+                    "text": f"AX info for item {item['index']}: {self._serialize_ax_info(item)}",
+                }
+            )
             content.append(
                 {
                     "type": "image_url",
@@ -165,18 +173,41 @@ class FocusVisibleConsumer(BaseConsumer):
             for item in parsed:
                 if not isinstance(item, dict):
                     continue
-                if "index" not in item or "is_image" not in item or "has_focus_indicator" not in item:
+                if "index" not in item or "has_focus_indicator" not in item:
+                    continue
+                parsed_indicator = self._parse_bool(item.get("has_focus_indicator"))
+                if parsed_indicator is None:
                     continue
                 normalized.append(
                     {
                         "index": item.get("index"),
-                        "is_image": bool(item.get("is_image")),
-                        "has_focus_indicator": bool(item.get("has_focus_indicator")),
+                        "has_focus_indicator": parsed_indicator,
                     }
                 )
             if normalized:
                 return normalized
         return []
+
+    def _serialize_ax_info(self, item: dict[str, Any]) -> str:
+        """Safely serialize AX info for inclusion in prompts."""
+        try:
+            return json.dumps(item.get("ax_info") or {}, ensure_ascii=False, default=str)
+        except Exception:
+            return "{}"
+
+    def _parse_bool(self, value: Any) -> bool | None:
+        """Parse boolean-like values from LLM output safely."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"true", "1", "yes"}:
+                return True
+            if normalized in {"false", "0", "no"}:
+                return False
+        return None
 
     def _build_issues(self, items: list[dict[str, Any]], results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         by_index = {r.get("index"): r for r in results if isinstance(r, dict)}
@@ -185,17 +216,17 @@ class FocusVisibleConsumer(BaseConsumer):
             res = by_index.get(item.get("index"))
             if not res:
                 continue
-            if res.get("is_image") and not res.get("has_focus_indicator"):
+            if not res.get("has_focus_indicator"):
                 index = item.get("index")
                 issue = Issue(
-                    id=f"focus-visible-image-{index}",
+                    id=f"focus-visible-{index}",
                     wcag_rule=WCAG_RULE,
-                    description="Focused image lacks a visible focus indicator",
+                    description="Focused element lacks a visible focus indicator",
                     html_snippet=item.get("html_snippet", ""),
                     severity="serious",
                     confidence="high",
                     source="llm/focus_visible_analyzer",
-                    fix="Ensure focused images display a clear focus outline or border.",
+                    fix="Ensure all focused interactive elements display a clear, visible focus outline or border.",
                     image_url_or_path=None,
                 ).model_dump()
                 issues.append(issue)

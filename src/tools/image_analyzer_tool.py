@@ -100,7 +100,7 @@ class ImageAnalyzerTool(Tool):
                         id=f"image-alt-mismatch-{idx}",
                         wcag_rule=WCAG_RULE,
                         description="Missing alt text" if not img.get("alt_text") else "Inconsistent alt text",
-                        html_snippet=img.get("source_selector") or "",
+                        html_snippet=img.get("outer_html") or img.get("source_selector") or "",
                         severity="critical",
                         confidence="high",
                         source="llm/image-analyzer",

@@ -11,6 +11,21 @@ URL_RE = re.compile(r"url\([\'\"](.*?)[\'\"]\)")
 
 JS_COLLECT = r"""
 () => {
+  function getAltAttributeFlags(el) {
+    if (!el || typeof el.hasAttribute !== 'function') {
+      return {
+        has_alt_attribute: false,
+        is_empty_alt: false
+      };
+    }
+    const hasAlt = el.hasAttribute('alt');
+    const alt = hasAlt ? (el.getAttribute('alt') || '') : '';
+    return {
+      has_alt_attribute: hasAlt,
+      is_empty_alt: hasAlt && alt.trim() === ''
+    };
+  }
+
   function getAltLike(el) {
     // priority: alt (img) -> aria-label -> aria-labelledby -> figcaption/closest figure -> title
 
@@ -67,6 +82,10 @@ JS_COLLECT = r"""
     return el.tagName ? el.tagName.toLowerCase() : null;
   }
 
+  function outerHtmlFor(el) {
+    return (el && typeof el.outerHTML === 'string') ? el.outerHTML : null;
+  }
+
   const results = [];
 
   // 1) <img>
@@ -75,7 +94,9 @@ JS_COLLECT = r"""
       type: 'img',
       url: img.currentSrc || img.src || null,
       alt_text: getAltLike(img),
-      source_selector: selectorFor(img)
+      source_selector: selectorFor(img),
+      outer_html: outerHtmlFor(img),
+      ...getAltAttributeFlags(img)
     });
   });
 
@@ -86,7 +107,9 @@ JS_COLLECT = r"""
       type: 'svg-image',
       url: href,
       alt_text: getAltLike(im),
-      source_selector: selectorFor(im)
+      source_selector: selectorFor(im),
+      outer_html: outerHtmlFor(im),
+      ...getAltAttributeFlags(im)
     });
   });
 
@@ -100,7 +123,9 @@ JS_COLLECT = r"""
         type: 'css-background',
         url: bg, // keep raw; parse in python to extract url(...)
         alt_text: getAltLike(el),
-        source_selector: selectorFor(el)
+        source_selector: selectorFor(el),
+        outer_html: outerHtmlFor(el),
+        ...getAltAttributeFlags(el)
       });
     }
 
@@ -111,7 +136,9 @@ JS_COLLECT = r"""
         type: 'css-background::before',
         url: b1,
         alt_text: getAltLike(el),
-        source_selector: selectorFor(el)
+        source_selector: selectorFor(el),
+        outer_html: outerHtmlFor(el),
+        ...getAltAttributeFlags(el)
       });
     }
     const b2 = getComputedStyle(el, '::after').backgroundImage;
@@ -120,7 +147,9 @@ JS_COLLECT = r"""
         type: 'css-background::after',
         url: b2,
         alt_text: getAltLike(el),
-        source_selector: selectorFor(el)
+        source_selector: selectorFor(el),
+        outer_html: outerHtmlFor(el),
+        ...getAltAttributeFlags(el)
       });
     }
 
@@ -131,7 +160,9 @@ JS_COLLECT = r"""
         type: 'css-content::before',
         url: c1,
         alt_text: getAltLike(el),
-        source_selector: selectorFor(el)
+        source_selector: selectorFor(el),
+        outer_html: outerHtmlFor(el),
+        ...getAltAttributeFlags(el)
       });
     }
     const c2 = getComputedStyle(el, '::after').content;
@@ -140,7 +171,9 @@ JS_COLLECT = r"""
         type: 'css-content::after',
         url: c2,
         alt_text: getAltLike(el),
-        source_selector: selectorFor(el)
+        source_selector: selectorFor(el),
+        outer_html: outerHtmlFor(el),
+        ...getAltAttributeFlags(el)
       });
     }
   }
@@ -212,8 +245,14 @@ class ImageExtractor(Tool):
                     "url": url,
                     "alt_text": item.get("alt_text", "") or "",
                     "source_selector": item.get("source_selector"),
+                    "outer_html": item.get("outer_html"),
+                    "has_alt_attribute": bool(item.get("has_alt_attribute")),
+                    "is_empty_alt": bool(item.get("is_empty_alt")),
                 }
             )
+
+        # remove decorative image-like elements explicitly marked with empty `alt`
+        out = [img for img in out if not (img.get("has_alt_attribute") and img.get("is_empty_alt"))]
 
         # deduplication
         dedup = {}
