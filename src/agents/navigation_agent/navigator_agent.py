@@ -2,7 +2,7 @@ from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import MODEL
-from schemas import Report
+from schemas import Report, ScoreInfo
 from tools import RuntimeNavigatorTool
 from tools.base import ToolResult
 
@@ -17,16 +17,20 @@ async def analyze_runtime_navigation(tool_context: ToolContext, max_steps: int =
     updated_keys = []
     for consumer_result in consumer_results:
         report_key = consumer_result.get("report_key")
+        consumer_result_data = consumer_result.get("result", {})
+        issue_list = consumer_result_data.get("issue_list", []) or []
         if not report_key:
             continue
         report_dict = Report.model_validate(
             {
-                "tool_name": consumer_result.get("result", {}).get("name"),
-                "issue_list": consumer_result.get("result", {}).get("issue_list"),
-                "total_issues": len(consumer_result.get("result", {}).get("issue_list")),
+                "tool_name": consumer_result_data.get("name"),
+                "issue_list": issue_list,
+                "total_issues": len(issue_list),
                 "page": page_url,
+                "score_passed": consumer_result_data.get("score_passed", ScoreInfo()),
+                "score_total": consumer_result_data.get("score_total", ScoreInfo()),
                 "metadata": [
-                    {"key": "checked", "value": consumer_result.get("result").get("checked")},
+                    {"key": "checked", "value": int(consumer_result_data.get("checked", 0) or 0)},
                 ],
             }
         ).model_dump()

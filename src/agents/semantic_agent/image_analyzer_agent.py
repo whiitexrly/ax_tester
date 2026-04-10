@@ -28,6 +28,8 @@ async def analyze_images_in_webpage(tool_context: ToolContext) -> dict:
             "issue_list": issue_list,
             "total_issues": len(issue_list),
             "page": page_url,
+            "score_passed": raw.score_passed,
+            "score_total": raw.score_total,
             "metadata": [
                 {"key": "status", "value": raw.status.value},
                 {"key": "error", "value": raw.error or ""},

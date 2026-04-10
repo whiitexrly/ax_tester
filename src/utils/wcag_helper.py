@@ -168,7 +168,7 @@ def get_rule_name_from_axe_tags(tags: list[str]) -> str:
     rule_name = "best-practice"
 
     for tag in tags:
-        level = WCAG_LEVEL_MAPPER.get(tag, 4)
+        level = WCAG_LEVEL_MAPPER.get(tag, best_level)
         if level < best_level:
             best_level = level
             rule_name = WCAG_RULE_MAPPER[tag]

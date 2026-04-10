@@ -1,3 +1,4 @@
+import json
 import logging
 
 from google.adk.agents import SequentialAgent
@@ -15,20 +16,20 @@ logger = logging.getLogger(__name__)
 
 
 def get_merge_agent_instruction(tool_context: ToolContext) -> str:
-    import json
-
     loop_report = tool_context.state.get(ContextKey.LOOP_REPORT, {"issue_list": []})
     if isinstance(loop_report, str):
         try:
             loop_report = json.loads(loop_report)
         except Exception:
             loop_report = {"issue_list": []}
+
     axe_report = tool_context.state.get(ContextKey.AXE_REPORT, {})
     axe_issue_list = []
     page_url = ""
     if isinstance(axe_report, dict):
         axe_issue_list = axe_report.get("data", {}).get("issue_list", [])
         page_url = axe_report.get("data", {}).get("url", "")
+
     axe_report_json = json.dumps(axe_issue_list, ensure_ascii=True)
     loop_report_json = json.dumps(loop_report, ensure_ascii=True)
 
@@ -54,7 +55,7 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
         1. De-duplicate by WCAG rule + similar description
         2. If same issue found by both: mark as 'confidence: high'
         3. Preserve all unique issues from both sources
-        4. Add 'source' field: 'axe' | 'llm' | 'both'
+        4. Add 'source' field: 'axe-core' | 'llm' | 'both'
 
         OUTPUT SCHEMA:
         - tool_name: "static-analysis"
@@ -64,13 +65,15 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
           (set image_url_or_path to null when unknown)
         - total_issues: number of unique issues
         - page: analyzed page URL
+        - score_passed: object {level_A, level_AA, level_AAA}
+        - score_total: object {level_A, level_AA, level_AAA}
+          If exact static scoring is not available, set both objects to zeros.
         - metadata: list of objects with fields {key, value}
           Required metadata keys:
           - by_severity (JSON string)
           - by_source (JSON string)
           - by_wcag_level (JSON string)
           - coverage_score (integer)
-          - top_priorities (JSON string)
 
         Return ONLY the JSON object, no other text.
         Keep html_snippet concise and valid JSON strings.

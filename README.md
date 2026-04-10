@@ -28,6 +28,8 @@ All final reports use the same `Report` schema:
 - `issue_list`: list of normalized issues
 - `total_issues`: total number of issues in `issue_list`
 - `page`: analyzed URL
+- `score_passed`: counters of passed checks by WCAG level (`level_A`, `level_AA`, `level_AAA`)
+- `score_total`: counters of total analyzed checks by WCAG level (`level_A`, `level_AA`, `level_AAA`)
 - `metadata`: list of `{key, value}` entries for tool-specific extra data
 
 Each issue follows a single `Issue` schema and includes `image_url_or_path` (nullable):
@@ -54,7 +56,7 @@ The **Static Analysis Agent** runs an accessibility assessment from the availabl
 3. **Merge Agent**
    - Merges **`axe_report` + `loop_report`** into one unified report.
    - De-duplicates by *WCAG rule + same node*.
-   - Assigns `source` (`axe|llm|both`) and `confidence`.
+   - Assigns `source` (`axe-core|llm|both`) and `confidence`.
    - Output: `static_report` (`Report`)
 
 4. **JSON Formatter**

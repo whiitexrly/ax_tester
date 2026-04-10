@@ -4,6 +4,8 @@ This file exposes root_agent for ADK discovery while keeping the implementation
 inside src/agents.
 """
 
+from collections import Counter
+
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.sequential_agent import SequentialAgent
 from google.adk.tools.tool_context import ToolContext
@@ -12,9 +14,11 @@ from agents.navigation_agent import navigator_agent
 from agents.semantic_agent import image_analyzer_agent
 from agents.static_agent import static_analysis_agent
 from common import FINAL_REPORT_KEYS, MODEL, ContextKey
+from schemas import ScoreInfo
 from utils.browser_session import BROWSER_SESSION
 from utils.report_excel import build_excel_report
 from utils.report_pptx import build_pptx_report
+from utils.wcag_helper import get_wcag_level
 
 ROOT_AGENT_INSTRUCTION = """
 You are the root orchestrator for the accessibility workflow.
@@ -79,17 +83,43 @@ def run_save(tool_context: ToolContext):
     os.makedirs(results_dir, exist_ok=True)
 
     all_issues: list[dict] = []
+    score_passed_agg: ScoreInfo = ScoreInfo()
+    score_total_agg: ScoreInfo = ScoreInfo()
+
     for report_name in FINAL_REPORT_KEYS:
         report_data = tool_context.state.get(report_name, {})
         with open(f"{results_dir}/{report_name.lower()}.json", "w", encoding="utf-8") as file:
             json.dump(report_data, file, indent=2, ensure_ascii=False)
 
         issue_list = report_data.get("issue_list", []) if isinstance(report_data, dict) else []
+
+        # filter by wcag compliance level
         issue_list = [issue for issue in issue_list if issue.get("severity", "") != "minor"]
         for compliance_level in ["AAA", "AA", "A"]:
-            if tool_context.state[ContextKey.COMPLIANCE_LEVEL] == compliance_level:
+            if tool_context.state.get(ContextKey.COMPLIANCE_LEVEL, "AA") == compliance_level:
                 break
-            issue_list = [issue for issue in issue_list if compliance_level not in issue.get("wcag_rule")]
+            issue_list = [issue for issue in issue_list if compliance_level not in issue.get("wcag_rule", "")]
+
+        # compute score info
+        if report_name == ContextKey.STATIC_REPORT:
+            axe_score_total = tool_context.state.get(ContextKey.AXE_REPORT, {}).get("score_total", 0)
+            score_total_agg.level_A += axe_score_total["level_A"]
+            score_total_agg.level_AA += axe_score_total["level_AA"]
+            score_total_agg.level_AAA += axe_score_total["level_AAA"]
+
+            level_counts = Counter(get_wcag_level(item.get("wcag_rule")) for item in issue_list)
+            score_passed_agg.level_A += axe_score_total["level_A"] - level_counts["A"]
+            score_passed_agg.level_AA += axe_score_total["level_AA"] - level_counts["AA"]
+            score_passed_agg.level_AAA += axe_score_total["level_AAA"] - level_counts["AAA"]
+        else:
+            score_total_agg.level_A += report_data["score_total"]["level_A"]
+            score_total_agg.level_AA += report_data["score_total"]["level_AA"]
+            score_total_agg.level_AAA += report_data["score_total"]["level_AAA"]
+
+            score_passed_agg.level_A += report_data["score_passed"]["level_A"]
+            score_passed_agg.level_AA += report_data["score_passed"]["level_AA"]
+            score_passed_agg.level_AAA += report_data["score_passed"]["level_AAA"]
+
         all_issues.extend(issue_list)
 
     aggregate_report = {
@@ -97,6 +127,8 @@ def run_save(tool_context: ToolContext):
         "total_issues": len(all_issues),
         "page": tool_context.state.get(ContextKey.STATIC_REPORT, {}).get("page", ""),
         "issue_list": all_issues,
+        "score_passed": score_passed_agg.model_dump(),
+        "score_total": score_total_agg.model_dump(),
         "metadata": [],
     }
     with open(f"{results_dir}/ax_report.json", "w", encoding="utf-8") as file:

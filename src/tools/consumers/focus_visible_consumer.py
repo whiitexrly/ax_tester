@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from common import MODEL_NAME, ContextKey
-from schemas import Issue
+from schemas import Issue, ScoreInfo
 from tools.base import ActiveElementInfo, NavigatorState
 from tools.consumers.base import BaseConsumer
 from utils.llm_helper import call_llm
@@ -88,6 +88,8 @@ class FocusVisibleConsumer(BaseConsumer):
                 "name": self.name,
                 "issue_list": [],
                 "checked": 0,
+                "score_passed": ScoreInfo(),
+                "score_total": ScoreInfo(),
             }
 
         batches = self._batch_items(self._items, self.max_items_per_batch, self.max_prompt_chars)
@@ -100,6 +102,8 @@ class FocusVisibleConsumer(BaseConsumer):
             "name": self.name,
             "issue_list": issues,
             "checked": len(self._items),
+            "score_passed": ScoreInfo(level_AA=len(self._items) - len(issues)),
+            "score_total": ScoreInfo(level_AA=len(self._items)),
         }
 
     def _batch_items(

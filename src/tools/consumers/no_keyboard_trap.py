@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 from common import MODEL_NAME, ContextKey
-from schemas import Issue
+from schemas import Issue, ScoreInfo
 from tools.base import ActiveElementInfo, NavigatorState
 from tools.consumers.base import BaseConsumer
 from utils.browser_session import NavigationCommand
@@ -63,6 +63,7 @@ class NoKeyboardTrapConsumer(BaseConsumer):
     def __init__(self):
         self._issues: list[dict[str, Any]] = []
         self._steps = 0
+        self._checked = 0
 
     def consume(self, state: NavigatorState, **kwargs) -> None:
         self._steps += 1
@@ -74,8 +75,10 @@ class NoKeyboardTrapConsumer(BaseConsumer):
             return
 
         transition_key = state.path[-1]
-        if transition_key != NavigationCommand.ESCAPE or NavigationCommand.SPACE.value not in state.path:
+        if transition_key != NavigationCommand.ESCAPE.value or NavigationCommand.SPACE.value not in state.path:
             return
+
+        self._checked += 1
 
         issue = self._build_issue(root_element=root_element, previous=previous, current=current)
         if issue is not None:
@@ -88,7 +91,9 @@ class NoKeyboardTrapConsumer(BaseConsumer):
         return {
             "name": self.name,
             "issue_list": self._issues,
-            "checked": self._steps,
+            "checked": self._checked,
+            "score_passed": ScoreInfo(level_A=self._checked - len(self._issues)),
+            "score_total": ScoreInfo(level_A=self._checked),
         }
 
     def _build_issue(

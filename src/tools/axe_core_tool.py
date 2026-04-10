@@ -8,13 +8,14 @@ This tool injects axe-core in the current shared browser page
 
 import json
 import logging
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from schemas import Issue
+from schemas import Issue, ScoreInfo
 from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
 from utils.browser_session import BROWSER_SESSION
-from utils.wcag_helper import get_rule_name_from_axe_tags
+from utils.wcag_helper import get_rule_name_from_axe_tags, get_wcag_level
 
 logger = logging.getLogger(__name__)
 
@@ -56,14 +57,23 @@ class AxeCoreTool(Tool):
         logger.info("Running axe-core analysis on current page")
 
         try:
-            axe_results = await self._run_axe_with_shared_session_async()
+            axe_results = await self._run_axe_core()
             violations = axe_results.get("violations", [])
             incomplete = axe_results.get("incomplete", [])
             inapplicable = axe_results.get("inapplicable", [])
+            passes = axe_results.get("passes", [])
             page_url = axe_results.get("url", "")
 
             issue_list = self._map_violations_to_issues(violations)
+            passed_list = self._map_violations_to_issues(passes)
 
+            score_passed: ScoreInfo = self._build_score_info(passed_list)
+            score_failed: ScoreInfo = self._build_score_info(issue_list)
+            score_total: ScoreInfo = ScoreInfo(
+                level_A=score_failed.level_A + score_passed.level_A,
+                level_AA=score_failed.level_AA + score_passed.level_AA,
+                level_AAA=score_failed.level_AAA + score_passed.level_AAA,
+            )
             logger.info(
                 f"Axe-core analysis complete for {page_url}: {len(violations)} violations, "
                 f"{len(incomplete)} incomplete, {len(issue_list)} mapped issues"
@@ -76,10 +86,13 @@ class AxeCoreTool(Tool):
                     "violations": violations,
                     "incomplete": incomplete,
                     "inapplicable": inapplicable,
+                    "passes": passes,
                     "issue_list": issue_list,
                     "url": page_url,
                     "timestamp": axe_results.get("timestamp"),
                 },
+                score_passed=score_passed,
+                score_total=score_total,
             )
 
         except ToolExecutionError:
@@ -92,11 +105,13 @@ class AxeCoreTool(Tool):
                 tool_name="axe-core",
                 status=ToolStatus.FAILURE,
                 data={},
+                score_passed=ScoreInfo(),
+                score_total=ScoreInfo(),
                 error=str(e),
                 metadata={"url": page_url},
             )
 
-    async def _run_axe_with_shared_session_async(self) -> dict[str, Any]:
+    async def _run_axe_core(self) -> dict[str, Any]:
         """Execute axe-core in the already-open shared browser page.
 
         Returns:
@@ -118,9 +133,8 @@ class AxeCoreTool(Tool):
                 await page.add_script_tag(content=self.axe_source)
 
             axe_results = await page.evaluate("() => axe.run(document)")
-
-            axe_results.pop("passes", None)
             axe_results["url"] = page.url
+
             return axe_results
 
         except ToolExecutionError:
@@ -160,6 +174,16 @@ class AxeCoreTool(Tool):
         if impact in {"critical", "serious", "moderate", "minor"}:
             return impact
         return "moderate"
+
+    def _build_score_info(self, items: list[dict[str, Any]]) -> ScoreInfo:
+        level_counts = Counter(
+            get_wcag_level(item.get("wcag_rule")) for item in items if item.get("wcag_rule") != "best-practice"
+        )
+        return ScoreInfo(
+            level_A=level_counts["A"],
+            level_AA=level_counts["AA"],
+            level_AAA=level_counts["AAA"],
+        )
 
 
 # simple test runner

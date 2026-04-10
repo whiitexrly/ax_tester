@@ -1,10 +1,11 @@
 """Base interface for all accessibility testing tools"""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from schemas import ScoreInfo
 from utils.browser_session import NavigationCommand
 
 
@@ -68,6 +69,8 @@ class ToolResult:
     tool_name: str
     status: ToolStatus
     data: dict[str, Any]
+    score_passed: ScoreInfo = field(default_factory=ScoreInfo)
+    score_total: ScoreInfo = field(default_factory=ScoreInfo)
     error: str | None = None
     metadata: dict[str, Any] | None = None
 
@@ -77,11 +80,15 @@ class ToolResult:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization"""
+        score_passed = self.score_passed.model_dump()
+        score_total = self.score_total.model_dump()
         return {
             "tool_name": self.tool_name,
             "status": self.status.value,
             "data": self.data,
             "error": self.error,
+            "score_passed": score_passed,
+            "score_total": score_total,
             "metadata": self.metadata or {},
         }
 

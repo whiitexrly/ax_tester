@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 from common import ContextKey
-from schemas import Issue
+from schemas import Issue, ScoreInfo
 from tools.base import ActiveElementInfo, NavigatorState
 from tools.consumers.base import BaseConsumer
 from utils.browser_session import NavigationCommand
@@ -22,6 +22,7 @@ class OnFocusConsumer(BaseConsumer):
     def __init__(self):
         self._issues: list[dict[str, Any]] = []
         self._steps = 0
+        self._checked = 0
 
     def consume(self, state: NavigatorState, **kwargs) -> None:
         self._steps += 1
@@ -32,17 +33,16 @@ class OnFocusConsumer(BaseConsumer):
             return
 
         issue: dict[str, Any] | None = None
-        if len(state.path) != 0:
-            transition_key: NavigationCommand = state.path[-1]
-        else:
-            transition_key: NavigationCommand = None
+        transition_key: NavigationCommand | None = state.path[-1] if state.path else None
 
-        if transition_key.value in (NavigationCommand.TAB, NavigationCommand.SHIFT_TAB):
+        if transition_key.value in (NavigationCommand.TAB.value, NavigationCommand.SHIFT_TAB.value):
+            self._checked += 1
             issue = self._build_issue_tab(previous, current)
-        elif transition_key.value in (NavigationCommand.ESCAPE, NavigationCommand.SPACE):
+        elif transition_key.value in (NavigationCommand.ESCAPE.value, NavigationCommand.SPACE.value):
             root_focus_key: str | None = kwargs.get("root_focus_key")
             if root_focus_key is None:
                 return
+            self._checked += 1
             issue = self._build_issue_space_escape(transition_key, current, root_focus_key)
 
         if issue is not None:
@@ -55,7 +55,9 @@ class OnFocusConsumer(BaseConsumer):
         return {
             "name": self.name,
             "issue_list": self._issues,
-            "checked": self._steps,
+            "checked": self._checked,
+            "score_passed": ScoreInfo(level_A=self._checked - len(self._issues)),
+            "score_total": ScoreInfo(level_A=self._checked),
         }
 
     def _build_issue_tab(

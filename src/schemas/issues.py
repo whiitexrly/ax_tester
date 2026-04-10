@@ -124,11 +124,41 @@ class MetadataItem(BaseModel):
     value: str | int
 
 
+class ScoreInfo(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "additionalProperties": False,
+            "required": ["level_A", "level_AA", "level_AAA"],
+        },
+    )
+
+    level_A: int = Field(0)
+    level_AA: int = Field(0)
+    level_AAA: int = Field(0)
+
+
 class Report(BaseModel):
-    model_config = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "additionalProperties": False,
+            "required": [
+                "tool_name",
+                "total_issues",
+                "page",
+                "issue_list",
+                "score_passed",
+                "score_total",
+                "metadata",
+            ],
+        },
+    )
 
     tool_name: str = Field(...)
     total_issues: int = Field(...)
     page: str = Field(...)
     issue_list: list[Issue] = Field(...)
-    metadata: list[MetadataItem] = Field(...)
+    score_passed: ScoreInfo = Field(default_factory=ScoreInfo)
+    score_total: ScoreInfo = Field(default_factory=ScoreInfo)
+    metadata: list[MetadataItem] = Field(default_factory=list)

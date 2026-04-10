@@ -1,14 +1,15 @@
 import json
 import logging
 import re
+from collections import Counter
 from typing import Any
 
 from common import MODEL_NAME, ContextKey
-from schemas import Issue
+from schemas import Issue, ScoreInfo
 from tools.base import ActiveElementInfo, NavigatorState
 from tools.consumers.base import BaseConsumer
 from utils.llm_helper import call_llm
-from utils.wcag_helper import get_rule_name_from_axe_tags
+from utils.wcag_helper import get_rule_name_from_axe_tags, get_wcag_level
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +136,8 @@ class LinkPurposeConsumer(BaseConsumer):
                 "name": self.name,
                 "issue_list": [],
                 "checked": 0,
+                "score_passed": ScoreInfo(),
+                "score_total": ScoreInfo(),
             }
 
         batches = self._batch_items(self._items)
@@ -144,10 +147,19 @@ class LinkPurposeConsumer(BaseConsumer):
             decisions.extend(self._analyze_batch(batch))
 
         issues = self._build_issues(self._items, decisions)
+
+        level_counts = Counter(get_wcag_level(item.get("wcag_rule")) for item in issues)
+        level_A_issues = level_counts["A"]
+        level_AAA_issues = level_counts["AAA"]
         return {
             "name": self.name,
             "issue_list": issues,
             "checked": len(self._items),
+            "score_passed": ScoreInfo(
+                level_A=len(self._items) - level_A_issues,
+                level_AAA=len(self._items) - level_AAA_issues - level_A_issues,
+            ),
+            "score_total": ScoreInfo(level_A=len(self._items), level_AAA=len(self._items)),
         }
 
     def _batch_items(self, items: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
@@ -222,10 +234,7 @@ class LinkPurposeConsumer(BaseConsumer):
 
         decisions: list[dict[str, Any]] = []
         for item in parsed:
-            if not isinstance(item, dict):
-                continue
-
-            if "index" not in item:
+            if not isinstance(item, dict) or "index" not in item:
                 continue
 
             severity = str(item.get("severity") or "moderate").lower()

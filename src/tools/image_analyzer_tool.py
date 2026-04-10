@@ -3,7 +3,7 @@ import logging
 import re
 from typing import Any
 
-from schemas import Issue
+from schemas import Issue, ScoreInfo
 from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
 from tools.image_captioner import ImageCaptioner
 from tools.image_extractor import ImageExtractor
@@ -63,6 +63,8 @@ class ImageAnalyzerTool(Tool):
                     tool_name="image-analyzer",
                     status=ToolStatus.FAILURE,
                     data={},
+                    score_passed=ScoreInfo(),
+                    score_total=ScoreInfo(),
                     error=extracted.error or "image_extractor_failed",
                     metadata=extracted.metadata or {"url": page_url},
                 )
@@ -76,6 +78,8 @@ class ImageAnalyzerTool(Tool):
                     tool_name="image-analyzer",
                     status=ToolStatus.FAILURE,
                     data={},
+                    score_passed=ScoreInfo(),
+                    score_total=ScoreInfo(),
                     error=captions_result.error or "image_captioner_failed",
                     metadata=captions_result.metadata or {"url": page_url},
                 )
@@ -119,6 +123,8 @@ class ImageAnalyzerTool(Tool):
                     "extracted": len(images),
                     "decorative": tot_pure_decorative,
                 },
+                score_passed=ScoreInfo(level_A=len(captioned_images) - len(issue_list)),
+                score_total=ScoreInfo(level_A=len(captioned_images)),
                 metadata={"url": page_url},
             )
 
@@ -130,6 +136,8 @@ class ImageAnalyzerTool(Tool):
                 tool_name="image-analyzer",
                 status=ToolStatus.FAILURE,
                 data={},
+                score_passed=ScoreInfo(),
+                score_total=ScoreInfo(),
                 error=str(e),
                 metadata={"url": page_url},
             )
