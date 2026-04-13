@@ -157,7 +157,7 @@ class LinkPurposeConsumer(BaseConsumer):
             "checked": len(self._items),
             "score_passed": ScoreInfo(
                 level_A=len(self._items) - level_A_issues,
-                level_AAA=len(self._items) - level_AAA_issues - level_A_issues,
+                level_AAA=len(self._items) - level_AAA_issues,
             ),
             "score_total": ScoreInfo(level_A=len(self._items), level_AAA=len(self._items)),
         }
