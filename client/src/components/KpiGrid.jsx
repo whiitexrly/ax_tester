@@ -5,7 +5,7 @@ function scoreState(score) {
   return "Critical";
 }
 
-function KpiGrid({ kpis, score }) {
+function KpiGrid({ score }) {
   return (
     <section className="kpi-grid" aria-label="Key metrics">
       <article className="panel kpi-card">
@@ -63,33 +63,6 @@ function KpiGrid({ kpis, score }) {
         </p>
       </article>
 
-      <article className="panel kpi-card">
-        <p className="kpi-label">Total Issues</p>
-        <strong className="kpi-value">{kpis.totalIssues}</strong>
-        <p className="kpi-detail">Issues visible in the selected scope</p>
-      </article>
-
-      <article className="panel kpi-card kpi-critical">
-        <p className="kpi-label">Level A Issues</p>
-        <div className="kpi-main-row">
-          <strong className="kpi-value">{score.totalsByLevel.level_A - score.passedByLevel.level_A}</strong>
-          <span className="kpi-subvalue">Immediate priority</span>
-        </div>
-        <p className="kpi-detail">
-          Passed: {score.passedByLevel.level_A} / {score.totalsByLevel.level_A}
-        </p>
-      </article>
-
-      <article className="panel kpi-card kpi-serious">
-        <p className="kpi-label">Level AA Issues</p>
-        <div className="kpi-main-row">
-          <strong className="kpi-value">{score.totalsByLevel.level_AA - score.passedByLevel.level_AA}</strong>
-          <span className="kpi-subvalue">High priority</span>
-        </div>
-        <p className="kpi-detail">
-          Passed: {score.passedByLevel.level_AA} / {score.totalsByLevel.level_AA}
-        </p>
-      </article>
     </section>
   );
 }

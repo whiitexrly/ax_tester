@@ -1,15 +1,15 @@
 const COLORS = {
-  Perceivable: "#0f766e",
-  Operable: "#1d4ed8",
-  Understandable: "#9a3412",
-  Robust: "#374151",
-  "Best Practice": "#64748b",
+  Perceivable: "var(--severity-minor)",
+  Operable: "var(--brand)",
+  Understandable: "var(--severity-critical)",
+  Robust: "var(--text-soft)",
+  "Best Practice": "color-mix(in srgb, var(--text-soft) 62%, var(--surface))",
 };
 
 function buildConicGradient(items) {
   const total = items.reduce((sum, item) => sum + item.value, 0);
   if (!total) {
-    return "conic-gradient(#dbe1ea 0 100%)";
+    return "conic-gradient(color-mix(in srgb, var(--text-soft) 25%, var(--surface)) 0 100%)";
   }
 
   let cumulative = 0;

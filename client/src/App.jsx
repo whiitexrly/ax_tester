@@ -20,16 +20,18 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Header generatedAt={dashboard.generatedAt} />
+      <Header />
 
       <main className="content-wrap">
-        <FilterBar
-          pageOptions={dashboard.pageOptions}
-          selectedPage={selectedPage}
-          onPageChange={setSelectedPage}
-        />
+        <div className="filter-score-row">
+          <FilterBar
+            pageOptions={dashboard.pageOptions}
+            selectedPage={selectedPage}
+            onPageChange={setSelectedPage}
+          />
 
-        <KpiGrid kpis={dashboard.kpis} score={dashboard.score} />
+          <KpiGrid score={dashboard.score} />
+        </div>
 
         <section className="chart-grid">
           <IssueByWcagChart score={dashboard.score} />

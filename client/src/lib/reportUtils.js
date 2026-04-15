@@ -136,22 +136,6 @@ function matchesSearch(issue, searchTerm) {
   return haystack.includes(searchTerm.toLowerCase());
 }
 
-function firstGeneratedValue(reports) {
-  const dateKeys = ["generated_at", "generated_on", "created_at", "timestamp"];
-
-  for (const report of reports) {
-    const metadataMap = new Map(report.metadata.map((item) => [item.key.toLowerCase(), item.value]));
-
-    for (const key of dateKeys) {
-      if (metadataMap.has(key) && metadataMap.get(key)) {
-        return String(metadataMap.get(key));
-      }
-    }
-  }
-
-  return null;
-}
-
 function principleCounts(issues) {
   const base = {
     Perceivable: 0,
@@ -194,7 +178,6 @@ export function buildDashboardData(reports, selectedPage, searchTerm) {
     pageOptions: pages,
     selectedIssues: scopedIssues,
     visibleIssues,
-    generatedAt: firstGeneratedValue(selectedReports.length > 0 ? selectedReports : reports),
     principleDistribution: principleCounts(scopedIssues),
     score: {
       totalChecks,
@@ -210,25 +193,6 @@ export function buildDashboardData(reports, selectedPage, searchTerm) {
       avgIssuesPerPage: pageCount > 0 ? Number((scopedIssues.length / pageCount).toFixed(1)) : 0,
     },
   };
-}
-
-export function formatDateLabel(value) {
-  if (!value) {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date());
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return String(value);
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(parsed);
 }
 
 export function truncateText(value, maxLength = 140) {
