@@ -6,6 +6,7 @@ class ContextKey(StrEnum):
     DOM_HTML = "dom_html"
     WCAG_PROMPT = "wcag_prompt"
     COMPLIANCE_LEVEL = "compliance_level"
+    CRAWL_FOLDER_NAME = "crawl_folder_name"
 
     # temp storage
     LOOP_REPORT = "loop_report"

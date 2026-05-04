@@ -45,7 +45,7 @@ class BrowserSession:
             channel="chrome",
             args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-setuid-sandbox", "--start-maximised"],
         )
-        self.context = await self.browser.new_context()
+        self.context = await self.browser.new_context(bypass_csp=True)
         self.page = await self.context.new_page()
         await self.goto("about:blank")
 

@@ -4,49 +4,48 @@ This file exposes root_agent for ADK discovery while keeping the implementation
 inside src/agents.
 """
 
-from collections import Counter
+import logging
+from collections import deque
+from urllib.parse import urlparse
+from uuid import uuid4
 
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.sequential_agent import SequentialAgent
+from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.tools.tool_context import ToolContext
+from google.adk.utils.context_utils import Aclosing
+from google.genai import types
 
 from agents.navigation_agent import navigator_agent
 from agents.semantic_agent import image_analyzer_agent
 from agents.static_agent import static_analysis_agent
-from common import FINAL_REPORT_KEYS, MODEL, ContextKey
-from schemas import ScoreInfo
+from common import DUMMY_MODEL, MODEL, ContextKey
+from tools.saver_tool import generate_run_timestamp, run_save, write_run_results_index
 from utils.browser_session import BROWSER_SESSION
-from utils.report_excel import build_excel_report
-from utils.report_pptx import build_pptx_report
-from utils.wcag_helper import get_wcag_level
+from utils.site_crawler import collect_links_from_current_page, normalize_url
+
+logger = logging.getLogger(__name__)
 
 ROOT_AGENT_INSTRUCTION = """
-You are the root orchestrator for the accessibility workflow.
+You are the root orchestrator for accessibility testing.
 
-Available tools:
-- `initialize_session`: creates a fresh shared browser session.
-- `navigate_to_page(url)`: opens the requested page in the shared browser.
-- `is_initialized`: verify whether the browser and page are initialized.
-
-Available sub-agent:
-- `AccessibilityTesterAgent`: runs the full analysis pipeline on the current page.
-
+Use only this tool for tests:
+- `run_crawl_test(url, max_depth, max_pages, same_host_only)`
 
 Execution policy:
-1. Extract the target URL from the user message.
+1. Extract the target URL from the user request.
 2. If no URL is provided, ask one concise follow-up question requesting it, then stop.
-3. Ensure an active session exists:
-   - If `is_initialized` is not true, call `initialize_session`.
-4. Call `navigate_to_page` with the requested URL.
-5. Before running analysis, ask the user to confirm the visible browser page is the intended one.
-6. Exception: if the user explicitly asks to run the test immediately without additional approval, skip the confirmation step.
-7. Transfer to `AccessibilityTesterAgent` exactly once for that request.
-8. Return a short completion message including the final URL.
+3. Always run tests by calling `run_crawl_test`.
+4. Use user-provided crawl parameters when present; otherwise use defaults:
+   - `max_depth=0`
+   - `max_pages=10`
+   - `same_host_only=true`
+5. Return a short summary with root URL, visited pages, max depth, and whether `max_pages` was reached.
 
-Reliability rules:
-- If navigation fails because the browser session is unavailable, call `initialize_session` and retry `navigate_to_page` once.
-- Do not run unrelated tools or extra analysis passes.
-- If a step fails, report which step failed and ask only for the minimum information needed to continue.
+Rules:
+- Do not use alternate testing flows.
+- Call `run_crawl_test` exactly once per request.
 """
 
 
@@ -68,83 +67,192 @@ async def navigate_to_page(tool_context: ToolContext, url: str) -> dict[str, str
     return {"status": "success", "url": BROWSER_SESSION.page.url}
 
 
-async def is_initialized(tool_context: ToolContext) -> bool:
+async def is_initialized(tool_context: ToolContext) -> dict[str, str]:
     """Return whether the shared browser session is ready for navigation/testing."""
-    return BROWSER_SESSION.is_initialized()
+
+    return {"status": "success", "is_initialized": BROWSER_SESSION.is_initialized()}
 
 
-def run_save(tool_context: ToolContext):
-    import json
-    import os
-    from datetime import datetime
+async def _run_tester_once(
+    runner: Runner,
+    session_service: InMemorySessionService,
+    page_url: str,
+    crawl_folder_name: str,
+) -> dict[str, str]:
+    """Run AccessibilityTesterAgent once against the current page in BROWSER_SESSION."""
 
-    date_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    results_dir = f"ax_tester/results/{date_str}"
-    os.makedirs(results_dir, exist_ok=True)
+    logger.info(f"Running AccessibilityTesterAgent on {page_url}")
 
-    all_issues: list[dict] = []
-    score_passed_agg: ScoreInfo = ScoreInfo()
-    score_total_agg: ScoreInfo = ScoreInfo()
+    session_id = str(uuid4())
+    await session_service.create_session(
+        app_name="ax_tester_crawl_internal",
+        user_id="crawl_user",
+        session_id=session_id,
+        state={ContextKey.CRAWL_FOLDER_NAME: crawl_folder_name},
+    )
 
-    for report_name in FINAL_REPORT_KEYS:
-        report_data = tool_context.state.get(report_name, {})
-        with open(f"{results_dir}/{report_name.lower()}.json", "w", encoding="utf-8") as file:
-            json.dump(report_data, file, indent=2, ensure_ascii=False)
+    content = types.Content(
+        role="user",
+        parts=[
+            types.Part(
+                text=(
+                    f"Run the accessibility test now on the currently open page {page_url}. "
+                    "Use your standard sequence and save results."
+                )
+            )
+        ],
+    )
 
-        issue_list = report_data.get("issue_list", []) if isinstance(report_data, dict) else []
+    final_response = ""
+    async with Aclosing(
+        runner.run_async(
+            user_id="crawl_user",
+            session_id=session_id,
+            new_message=content,
+        )
+    ) as event_stream:
+        async for event in event_stream:
+            if event.content and event.content.parts:
+                text = "".join(part.text or "" for part in event.content.parts).strip()
+                if text and (event.author or "").lower() != "user":
+                    final_response = text
 
-        # filter by wcag compliance level
-        issue_list = [issue for issue in issue_list if issue.get("severity", "") != "minor"]
-        for compliance_level in ["AAA", "AA", "A"]:
-            if tool_context.state.get(ContextKey.COMPLIANCE_LEVEL, "AA") == compliance_level:
-                break
-            issue_list = [issue for issue in issue_list if compliance_level not in issue.get("wcag_rule", "")]
+    return {"status": "ok", "final_response": final_response}
 
-        # compute score info
-        if report_name == ContextKey.STATIC_REPORT:
-            axe_score_total = tool_context.state.get(ContextKey.AXE_REPORT, {}).get("score_total", 0)
-            score_total_agg.level_A += axe_score_total["level_A"]
-            score_total_agg.level_AA += axe_score_total["level_AA"]
-            score_total_agg.level_AAA += axe_score_total["level_AAA"]
 
-            level_counts = Counter(get_wcag_level(item.get("wcag_rule")) for item in issue_list)
-            score_passed_agg.level_A += axe_score_total["level_A"] - level_counts["A"]
-            score_passed_agg.level_AA += axe_score_total["level_AA"] - level_counts["AA"]
-            score_passed_agg.level_AAA += axe_score_total["level_AAA"] - level_counts["AAA"]
-        else:
-            score_total_agg.level_A += report_data["score_total"]["level_A"]
-            score_total_agg.level_AA += report_data["score_total"]["level_AA"]
-            score_total_agg.level_AAA += report_data["score_total"]["level_AAA"]
+def _extract_root_host_label(root_url: str) -> str:
+    """Extract host label from URL, supporting any domain suffix/TLD."""
+    host_label = (urlparse(root_url).hostname or "unknown-host").lower()
 
-            score_passed_agg.level_A += report_data["score_passed"]["level_A"]
-            score_passed_agg.level_AA += report_data["score_passed"]["level_AA"]
-            score_passed_agg.level_AAA += report_data["score_passed"]["level_AAA"]
+    sanitized = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in host_label).strip("._-")
+    return sanitized or "unknown-host"
 
-        all_issues.extend(issue_list)
 
-    aggregate_report = {
-        "tool_name": "ax_tester",
-        "total_issues": len(all_issues),
-        "page": tool_context.state.get(ContextKey.STATIC_REPORT, {}).get("page", ""),
-        "issue_list": all_issues,
-        "score_passed": score_passed_agg.model_dump(),
-        "score_total": score_total_agg.model_dump(),
-        "metadata": [],
+async def run_crawl_test(
+    tool_context: ToolContext,
+    url: str,
+    max_depth: int = 0,
+    max_pages: int = 10,
+    same_host_only: bool = True,
+) -> dict[str, object]:
+    """Run accessibility tests from root URL using BFS up to `max_depth`."""
+    if max_depth < 0:
+        return {"status": "error", "message": "max_depth must be >= 0."}
+    if max_pages <= 0:
+        return {"status": "error", "message": "max_pages must be > 0."}
+
+    logger.info(f"Running crawler on {url} with {max_depth=}, {max_pages=}")
+
+    try:
+        root_url = normalize_url(url)
+    except ValueError as exc:
+        return {"status": "error", "message": str(exc)}
+
+    root_host_label = _extract_root_host_label(root_url)
+    crawl_folder_name = f"{generate_run_timestamp()}_{root_host_label}"
+    tool_context.state[ContextKey.CRAWL_FOLDER_NAME] = crawl_folder_name
+
+    logger.info(f"Crawl folder name: {tool_context.state[ContextKey.CRAWL_FOLDER_NAME]}")
+
+    if not BROWSER_SESSION.is_initialized():
+        await BROWSER_SESSION.create_session()
+
+    crawl_session_service = InMemorySessionService()
+    crawl_runner = Runner(
+        app_name="ax_tester_crawl_internal",
+        agent=tester_agent,
+        session_service=crawl_session_service,
+    )
+
+    scheduled_urls: set[str] = {root_url}
+    visited: set[str] = set()
+    queue: deque[tuple[str, int]] = deque([(root_url, max_depth)])
+    results: list[dict[str, object]] = []
+
+    while queue and len(visited) < max_pages:
+        current_url, depth = queue.popleft()
+        if current_url in visited:
+            continue
+
+        visited.add(current_url)
+
+        node_result: dict[str, object] = {
+            "url": current_url,
+            "depth_remaining": depth,
+            "status": "pending",
+            "error": "",
+            "discovered_links": 0,
+            "child_links": [],
+        }
+        results.append(node_result)
+
+        await BROWSER_SESSION.goto(current_url)
+
+        # extract child links before the test mutates page state
+        child_links = []
+        if depth > 0:
+            try:
+                child_links = await collect_links_from_current_page(
+                    root_url=root_url,
+                    same_host_only=same_host_only,
+                )
+            except Exception as exc:
+                node_result["error"] = (
+                    f"{node_result['error']} | link_extraction_error: {exc}"
+                    if node_result["error"]
+                    else f"link_extraction_error: {exc}"
+                )
+
+            node_result["discovered_links"] = len(child_links)
+            node_result["child_links"] = child_links
+
+            # enqueue new child links up to the max_pages cap
+            for child_url in child_links:
+                try:
+                    child_url_normalized = normalize_url(child_url)
+                except ValueError:
+                    continue
+
+                if child_url_normalized in scheduled_urls:
+                    continue
+                if len(scheduled_urls) >= max_pages:
+                    break
+
+                scheduled_urls.add(child_url_normalized)
+                queue.append((child_url_normalized, depth - 1))
+
+        # run the ax tester on the current page
+        try:
+            test_result = await _run_tester_once(
+                runner=crawl_runner,
+                session_service=crawl_session_service,
+                page_url=current_url,
+                crawl_folder_name=crawl_folder_name,
+            )
+
+            node_result["status"] = test_result.get("status", "unknown")
+            node_result["final_response"] = test_result.get("final_response", "")
+            node_result["current_url"] = BROWSER_SESSION.page.url if BROWSER_SESSION.is_initialized() else ""
+        except Exception as exc:
+            node_result["status"] = "error"
+            node_result["error"] = f"test_execution_error: {exc}"
+            continue
+
+    results_file, saved_reports = write_run_results_index(crawl_folder_name)
+
+    return {
+        "status": "ok",
+        "run_timestamp": crawl_folder_name,
+        "root_url": root_url,
+        "max_depth": max_depth,
+        "max_pages": max_pages,
+        "same_host_only": same_host_only,
+        "number_visited_pages": len(visited),
+        "stopped_by_max_pages": len(visited) >= max_pages,
+        "saved_page_reports": len(saved_reports),
+        "visited_pages": list(visited),
     }
-    with open(f"{results_dir}/ax_report.json", "w", encoding="utf-8") as file:
-        json.dump(aggregate_report, file, indent=2, ensure_ascii=False)
 
-    build_excel_report(results_dir)
-    build_pptx_report(results_dir)
-
-
-saver = LlmAgent(
-    name="Saver",
-    model=MODEL,
-    description="Save results in local repository",
-    instruction="Use tool `run_save`.",
-    tools=[run_save],
-)
 
 tester_agent = SequentialAgent(
     name="AccessibilityTesterAgent",
@@ -153,7 +261,13 @@ tester_agent = SequentialAgent(
         static_analysis_agent,
         image_analyzer_agent,
         navigator_agent,
-        saver,
+        LlmAgent(
+            name="Saver",
+            model=DUMMY_MODEL,
+            description="Save results in local repository",
+            instruction="Use tool `run_save` once.",
+            tools=[run_save],
+        ),
     ],
 )
 
@@ -162,6 +276,5 @@ root_agent = LlmAgent(
     model=MODEL,
     description="",
     instruction=ROOT_AGENT_INSTRUCTION,
-    sub_agents=[tester_agent],
-    tools=[initialize_session, is_initialized, navigate_to_page],
+    tools=[run_crawl_test],
 )

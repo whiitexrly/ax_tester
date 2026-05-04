@@ -76,7 +76,7 @@ class AxeCoreTool(Tool):
             )
             logger.info(
                 f"Axe-core analysis complete for {page_url}: {len(violations)} violations, "
-                f"{len(incomplete)} incomplete, {len(issue_list)} mapped issues"
+                f"{len(incomplete)} incomplete, {len(passes)} passes, {len(issue_list)} mapped issues"
             )
 
             return ToolResult(

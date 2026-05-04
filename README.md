@@ -10,9 +10,33 @@ The project uses a shared singleton session defined in [`src/utils/browser_sessi
 
 ### Runtime lifecycle
 
-1. Initialize session once with root tool `initialize_session`.
-2. Navigate with root tool `navigate_to_page`.
-3. Run analysis tools/agents on the current page in `BROWSER_SESSION`.
+1. The user sends a request to `RootAgent` (`adk web`) or through MCP.
+2. `RootAgent` calls `run_crawl_test(url, max_depth, max_pages, same_host_only)` once.
+3. `run_crawl_test` crawls pages with BFS and runs the full tester pipeline on each visited page.
+4. Each page saves reports in its own folder; at the end of the crawl, a run-level `results.json` is generated.
+
+### Crawl Strategy
+
+The root agent uses `run_crawl_test(url, max_depth, max_pages, same_host_only)` to test a site with BFS:
+- links are explored level by level (queue-based crawl)
+- crawling stops for a branch when depth reaches `0`
+- by default only links on the same host are followed (`same_host_only=true`)
+- if `max_depth` is not provided, default is `0` (only the current/root page)
+- if `max_pages` is not provided, default is `10`
+
+
+### MCP Entry Point
+
+The MCP server exposes a single tool:
+- `send_message(message)`: forwards the received user message to `RootAgent`.
+
+### Results Folder Layout
+
+Reports are saved under `ax_tester/results/<crawl_folder_name>/`:
+- one folder per crawl invocation (`<crawl_folder_name>`, timestamp-based)
+- inside it, one timestamp-based folder per analyzed page, with a numeric suffix if needed
+- inside each page folder: per-tool JSON reports + `ax_report.json` + Excel/PPT exports
+- in the crawl root: `results.json`, containing the list of all page-level `ax_report` objects found in the page folders
 
 ### Tool contract
 

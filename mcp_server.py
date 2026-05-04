@@ -1,10 +1,4 @@
-"""MCP server exposing the ADK root agent for accessibility testing.
-
-Tools exposed:
-- open_page(url): initialize browser (if needed) and navigate using root agent.
-- run_full_test(url): run full root flow and force immediate delegation to tester agent.
-- reset_session(): create a brand new ADK session and close browser session.
-"""
+"""MCP server exposing a single entry point to the ADK root agent."""
 
 import uuid
 from dataclasses import dataclass, field
@@ -27,17 +21,11 @@ mcp = FastMCP("ax-tester-root-agent")
 
 @dataclass
 class RootAgentBridge:
-    """Keeps ADK runner/session alive across MCP tool calls."""
+    """Keeps ADK runner/session alive across MCP calls."""
 
     session_service: InMemorySessionService = field(default_factory=InMemorySessionService)
     runner: Runner | None = None
     session_id: str | None = None
-
-    async def reset(self) -> dict[str, Any]:
-        if BROWSER_SESSION.is_initialized():
-            await BROWSER_SESSION.close_session()
-        await self._open_session()
-        return {"status": "reset", "session_id": self.session_id}
 
     async def run_turn(self, user_message: str) -> dict[str, Any]:
         await self._ensure_session()
@@ -104,43 +92,9 @@ bridge = RootAgentBridge()
 
 
 @mcp.tool()
-async def open_page(url: str) -> dict[str, Any]:
-    """Open a page through root_agent without triggering full analysis."""
-    prompt = f"Open page {url}. Initialize the session if needed, then stop without running the analysis."
-    return await bridge.run_turn(prompt)
-
-
-@mcp.tool()
-async def run_full_test(url: str) -> dict[str, Any]:
-    """Run the full root flow on a given URL and force delegation to tester_agent."""
-    prompt = (
-        f"Run the full accessibility test on {url} and start immediately without additional confirmations. "
-        "Follow your standard workflow and delegate to AccessibilityTesterAgent."
-    )
-    return await bridge.run_turn(prompt)
-
-
-# @mcp.tool()
-# async def run_test_on_current_page() -> dict[str, Any]:
-#     """Run full test on the page currently loaded in shared browser session."""
-#     if not BROWSER_SESSION.is_initialized():
-#         return {
-#             "status": "error",
-#             "message": "No page is currently open: run open_page(url) or run_full_test(url) first.",
-#         }
-
-#     current_url = BROWSER_SESSION.page.url
-#     prompt = (
-#         f"Run the full accessibility test on {current_url} and start immediately without additional confirmations. "
-#         "Follow your standard workflow and delegate to AccessibilityTesterAgent."
-#     )
-#     return await bridge.run_turn(prompt)
-
-
-@mcp.tool()
-async def reset_session() -> dict[str, Any]:
-    """Reset ADK session and close browser if open."""
-    return await bridge.reset()
+async def send_message(message: str) -> dict[str, Any]:
+    """Single MCP entry point: forward the received message to RootAgent."""
+    return await bridge.run_turn(message)
 
 
 if __name__ == "__main__":

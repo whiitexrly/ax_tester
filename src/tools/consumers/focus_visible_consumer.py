@@ -19,7 +19,7 @@ FOCUS_VISIBILITY_PROMPT = """
     Each screenshot is centered on the focused element or may be not, if the element is on the border of the web page.
     For each item you also receive AX info (role/name/states/properties) as additional context.
     Decide for each item:
-    - has_focus_indicator: true if a clear focus outline/border/box/glow surrounds the focused element.
+    - has_focus_indicator: true if a clear focus outline/border/box/glow surrounds the focused element. It's also ok if the background of the element changes color. Any type of highlighting is considered as a focus
     - Use screenshot as primary evidence and AX info only as supporting context.
     Return JSON ONLY as an array of objects with keys: index, has_focus_indicator.
     If unsure, set has_focus_indicator false.
