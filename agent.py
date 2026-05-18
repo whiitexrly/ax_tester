@@ -49,30 +49,6 @@ Rules:
 """
 
 
-async def initialize_session(tool_context: ToolContext) -> dict[str, str]:
-    """Initialize a fresh shared browser session."""
-    await BROWSER_SESSION.create_session()
-
-    return {
-        "status": "initialized",
-        "browser_initialized": True,
-        "url": BROWSER_SESSION.page.url,
-    }
-
-
-async def navigate_to_page(tool_context: ToolContext, url: str) -> dict[str, str]:
-    """Navigate the shared browser session to a target URL."""
-    await BROWSER_SESSION.goto(url=url)
-
-    return {"status": "success", "url": BROWSER_SESSION.page.url}
-
-
-async def is_initialized(tool_context: ToolContext) -> dict[str, str]:
-    """Return whether the shared browser session is ready for navigation/testing."""
-
-    return {"status": "success", "is_initialized": BROWSER_SESSION.is_initialized()}
-
-
 async def _run_tester_once(
     runner: Runner,
     session_service: InMemorySessionService,
@@ -134,6 +110,7 @@ async def run_crawl_test(
     max_depth: int = 0,
     max_pages: int = 10,
     same_host_only: bool = True,
+    session_id: str | None = None,
 ) -> dict[str, object]:
     """Run accessibility tests from root URL using BFS up to `max_depth`."""
     if max_depth < 0:
@@ -155,7 +132,7 @@ async def run_crawl_test(
     logger.info(f"Crawl folder name: {tool_context.state[ContextKey.CRAWL_FOLDER_NAME]}")
 
     if not BROWSER_SESSION.is_initialized():
-        await BROWSER_SESSION.create_session()
+        await BROWSER_SESSION.create_session(session_id=session_id)
 
     crawl_session_service = InMemorySessionService()
     crawl_runner = Runner(
@@ -232,17 +209,23 @@ async def run_crawl_test(
 
             node_result["status"] = test_result.get("status", "unknown")
             node_result["final_response"] = test_result.get("final_response", "")
-            node_result["current_url"] = BROWSER_SESSION.page.url if BROWSER_SESSION.is_initialized() else ""
+            node_result["current_url"] = await BROWSER_SESSION.get_current_url()
         except Exception as exc:
             node_result["status"] = "error"
             node_result["error"] = f"test_execution_error: {exc}"
             continue
 
-    results_file, saved_reports = write_run_results_index(crawl_folder_name)
+        logger.info(f"{queue=}")
+
+    results_file, saved_reports, report_artifact = write_run_results_index(crawl_folder_name)
+    tool_context.state[ContextKey.REPORT_ARTIFACT] = report_artifact
+
+    await BROWSER_SESSION.close_session()
 
     return {
         "status": "ok",
         "run_timestamp": crawl_folder_name,
+        "report_id": crawl_folder_name,
         "root_url": root_url,
         "max_depth": max_depth,
         "max_pages": max_pages,
@@ -250,6 +233,8 @@ async def run_crawl_test(
         "number_visited_pages": len(visited),
         "stopped_by_max_pages": len(visited) >= max_pages,
         "saved_page_reports": len(saved_reports),
+        "results_file": str(results_file),
+        **report_artifact,
         "visited_pages": list(visited),
     }
 

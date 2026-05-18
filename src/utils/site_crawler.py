@@ -118,10 +118,11 @@ async def collect_links_from_current_page(root_url: str, same_host_only: bool = 
     if not BROWSER_SESSION.is_initialized():
         raise RuntimeError("Browser session not initialized.")
 
-    page = BROWSER_SESSION.page
-    raw_links = await page.evaluate(JS_COLLECT_PAGE_LINKS)
+    raw_links = await BROWSER_SESSION.evaluate(JS_COLLECT_PAGE_LINKS)
+    if not isinstance(raw_links, list):
+        return []
 
-    current_url = normalize_url(page.url)
+    current_url = normalize_url(await BROWSER_SESSION.get_current_url())
     collected: list[str] = []
     seen: set[str] = set()
 

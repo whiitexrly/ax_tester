@@ -48,12 +48,12 @@ async def fetch_dom_html(tool_context: ToolContext) -> dict[str, Any]:
             "Browser session not initialized. Initialize and navigate with root tools before fetching DOM."
         )
 
-    raw_html = await BROWSER_SESSION.page.content()
+    raw_html, page_url = await BROWSER_SESSION.get_page_html()
 
     clean_html, _ = sanitize_html_for_llm(raw_html)
 
     tool_context.state[ContextKey.DOM_HTML] = clean_html
-    return {"status": "fetched", "state_name": ContextKey.DOM_HTML, "url": BROWSER_SESSION.page.url}
+    return {"status": "fetched", "state_name": ContextKey.DOM_HTML, "url": page_url}
 
 
 init_agent = LlmAgent(

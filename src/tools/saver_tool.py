@@ -12,11 +12,10 @@ from common import FINAL_REPORT_KEYS, ContextKey
 from schemas import ScoreInfo
 from utils.report_excel import build_excel_report
 from utils.report_pptx import build_pptx_report
+from utils.report_store import build_report_manifest, create_report_directory
 from utils.wcag_helper import get_wcag_level
 
 logger = logging.getLogger(__name__)
-
-RESULTS_BASE_DIR = Path("ax_tester") / "results"
 
 
 def generate_run_timestamp() -> str:
@@ -26,8 +25,7 @@ def generate_run_timestamp() -> str:
 
 def _get_run_dir(crawl_folder_name: str) -> Path:
     """Ensure and return the crawl directory."""
-    run_dir = RESULTS_BASE_DIR / crawl_folder_name
-    run_dir.mkdir(parents=True, exist_ok=True)
+    _, run_dir = create_report_directory(crawl_folder_name)
     return run_dir
 
 
@@ -88,14 +86,65 @@ def _collect_run_ax_reports(run_dir: Path) -> list[dict[str, object]]:
     return reports
 
 
-def write_run_results_index(crawl_folder_name: str) -> tuple[Path, list[dict[str, object]]]:
-    """Write `<run_dir>/results.json` from all discovered page-level ax reports."""
+def _merge_score(target: ScoreInfo, raw_score: object) -> None:
+    score = _safe_score_info(raw_score)
+    target.level_A += score.level_A
+    target.level_AA += score.level_AA
+    target.level_AAA += score.level_AAA
+
+
+def _build_run_ax_report(crawl_folder_name: str, reports: list[dict[str, object]]) -> dict[str, object]:
+    all_issues: list[dict] = []
+    score_passed_agg = ScoreInfo()
+    score_total_agg = ScoreInfo()
+    pages: list[str] = []
+
+    for report in reports:
+        page = str(report.get("page", "")).strip()
+        if page:
+            pages.append(page)
+
+        issue_list = report.get("issue_list", [])
+        if isinstance(issue_list, list):
+            all_issues.extend(issue for issue in issue_list if isinstance(issue, dict))
+
+        _merge_score(score_passed_agg, report.get("score_passed", {}))
+        _merge_score(score_total_agg, report.get("score_total", {}))
+
+    return {
+        "tool_name": "ax_tester",
+        "total_issues": len(all_issues),
+        "page": pages[0] if len(pages) == 1 else "",
+        "issue_list": all_issues,
+        "score_passed": score_passed_agg.model_dump(),
+        "score_total": score_total_agg.model_dump(),
+        "metadata": [
+            {"key": "report_id", "value": crawl_folder_name},
+            {"key": "pages", "value": len(reports)},
+        ],
+    }
+
+
+def _write_run_artifacts(
+    crawl_folder_name: str, run_dir: Path, reports: list[dict[str, object]]
+) -> dict[str, object]:
+    run_report = _build_run_ax_report(crawl_folder_name, reports)
+    with open(run_dir / "ax_report.json", "w", encoding="utf-8") as file:
+        json.dump(run_report, file, indent=2, ensure_ascii=False)
+
+    build_excel_report(str(run_dir))
+    build_pptx_report(str(run_dir))
+    return build_report_manifest(crawl_folder_name, run_dir)
+
+
+def write_run_results_index(crawl_folder_name: str) -> tuple[Path, list[dict[str, object]], dict[str, object]]:
+    """Write run-level index and artifacts from discovered page reports."""
     run_dir = _get_run_dir(crawl_folder_name)
     reports = _collect_run_ax_reports(run_dir)
     results_file = run_dir / "results.json"
     with open(results_file, "w", encoding="utf-8") as file:
         json.dump(reports, file, indent=2, ensure_ascii=False)
-    return results_file, reports
+    return results_file, reports, _write_run_artifacts(crawl_folder_name, run_dir, reports)
 
 
 def run_save(tool_context: ToolContext) -> dict[str, object]:
@@ -178,6 +227,7 @@ def run_save(tool_context: ToolContext) -> dict[str, object]:
     return {
         "status": "saved",
         "run_timestamp": crawl_folder_name,
+        "report_id": crawl_folder_name,
         "run_dir": str(run_dir),
         "page_dir": str(page_dir),
     }

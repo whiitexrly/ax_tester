@@ -1,15 +1,14 @@
 import logging
-from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
-from playwright.async_api import async_playwright
+from utils.browser_executor_client import BrowserExecutorClient
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class NavigationCommand(StrEnum):
-    """Command usable for navigation"""
+    """Command usable for navigation."""
 
     TAB = "Tab"
     SHIFT_TAB = "Shift+Tab"
@@ -19,110 +18,157 @@ class NavigationCommand(StrEnum):
 
 
 class BrowserSession:
-    def __init__(self) -> None:
-        self.playwright = None
-        self.browser = None
-        self.context = None
-        self.page = None
+    """Facade over the external browser executor MCP server."""
+
+    def __init__(self, client: BrowserExecutorClient | None = None) -> None:
+        self.client = client or BrowserExecutorClient()
+        self._initialized = False
+        self._current_url = ""
 
     def is_initialized(self) -> bool:
-        """Return True when browser and current page are ready to use."""
-        if self.browser is None or not self.browser.is_connected():
-            return False
-        if self.page is None or self.page.is_closed():
-            if not self._rebind_page_from_browser():
-                return False
-        if self.page is None or self.page.is_closed():
-            return False
-        return True
+        """Return True when an executor browser session has been created."""
+        return self._initialized and bool(self.client.session_id)
 
-    async def create_session(self) -> None:
-        """Create a fresh Playwright browser/context/page session."""
-        await self.close_session()
-        self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(
-            headless=False,
-            channel="chrome",
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-setuid-sandbox", "--start-maximised"],
-        )
-        self.context = await self.browser.new_context(bypass_csp=True)
-        self.page = await self.context.new_page()
-        await self.goto("about:blank")
+    async def create_session(self, session_id: str | None = None) -> None:
+        """Create a fresh browser session through the executor MCP server."""
+        if self.is_initialized():
+            await self.close_session()
+
+        if session_id is not None:
+            self.client.session_id = session_id
+        else:
+            await self.client.call_tool(
+                "create_session",
+                {"initial_url": "about:blank"},
+                include_session_id=False,
+            )
+
+        self._initialized = True
+        await self._refresh_current_url()
 
     async def press_key(
-        self, key: NavigationCommand, tab_delay_ms: int = 50, expand_delay_ms: int = 1000
+        self, key: NavigationCommand | str, tab_delay_ms: int = 50, expand_delay_ms: int = 1000
     ) -> None:
-        """Press a keyboard key on the active page and wait for UI updates."""
-        if not self.is_initialized():
-            raise RuntimeError("Browser session not initialized")
-        await self.page.keyboard.press(key)
-        if tab_delay_ms > 0 and "Tab" in key:
-            await self.page.wait_for_timeout(tab_delay_ms)
-        elif expand_delay_ms > 0:
-            await self.page.wait_for_timeout(expand_delay_ms)
+        """Press a keyboard key on the active executor page and wait for UI updates."""
+        self._ensure_initialized()
+
+        key_value = key.value if isinstance(key, NavigationCommand) else str(key)
+        await self.client.call_tool("press_key", {"key": key_value, "times": 1})
+
+        delay_ms = tab_delay_ms if "Tab" in key_value else expand_delay_ms
+        if delay_ms > 0:
+            await self.wait_ms(delay_ms)
+
+    async def wait_ms(self, ms: int) -> None:
+        """Wait in the active executor page."""
+        self._ensure_initialized()
+        if ms > 0:
+            await self.client.call_tool("wait_ms", {"ms": ms})
 
     async def goto(self, url: str) -> None:
-        """Navigate the active page to the given URL."""
-        if not self.is_initialized():
-            raise RuntimeError("Browser session not initialized")
-        try:
-            await self.page.goto(url, wait_until="networkidle")
-        except Exception as exc:
-            logger.error(f"Failed to navigate to page {url}, {exc}")
+        """Navigate the active executor page to the given URL."""
+        self._ensure_initialized()
+        await self.client.call_tool("navigate", {"url": url})
+        self._current_url = await self._read_current_url(default=url)
 
     async def refresh_page(self) -> None:
-        """Reload the active page and wait for network idle."""
+        """Reload the active executor page."""
+        self._ensure_initialized()
+        await self.client.call_tool("refresh", {})
+        await self._refresh_current_url()
+
+    async def evaluate(self, expression: str) -> Any:
+        """Evaluate JavaScript in the active executor page."""
+        self._ensure_initialized()
+        return await self.client.call_tool("evaluate", {"js": expression})
+
+    async def add_script(self, content: str) -> dict[str, Any]:
+        """Inject JavaScript source into the active executor page."""
+        self._ensure_initialized()
+        payload = await self.client.call_tool("add_script", {"content": content})
+        return payload if isinstance(payload, dict) else {"injected": True}
+
+    async def get_page_html(self) -> tuple[str, str]:
+        """Return the current page HTML and URL."""
+        self._ensure_initialized()
+        raw_html = await self.evaluate("() => document.documentElement.outerHTML")
+        if isinstance(raw_html, dict):
+            raw_html = (
+                raw_html.get("html") or raw_html.get("source") or raw_html.get("value") or raw_html.get("result")
+            )
+        html = raw_html if isinstance(raw_html, str) else ""
+        url = await self._read_current_url()
+        return html, url
+
+    async def get_page_metadata(self) -> dict[str, Any]:
+        """Return serializable metadata for the active executor page."""
+        self._ensure_initialized()
+        payload = await self.client.call_tool("get_page_metadata", {})
+        if not isinstance(payload, dict):
+            return {"page_url": self._current_url, "page_title": "", "context_page_count": None}
+        if payload.get("page_url"):
+            self._current_url = str(payload["page_url"])
+        return payload
+
+    async def get_current_url(self) -> str:
+        """Return the current URL, refreshing from executor metadata when possible."""
         if not self.is_initialized():
-            raise RuntimeError("Browser session not initialized")
-        await self.page.reload(wait_until="networkidle")
-        self._rebind_page_from_browser()
+            return ""
+        return await self._read_current_url(default=self._current_url)
+
+    async def get_active_element_info(
+        self,
+        *,
+        include_ax: bool = True,
+        include_page_screenshot: bool = True,
+        include_element_screenshot: bool = True,
+        screenshot_margin: int = 50,
+        html_max_length: int = 400,
+    ) -> dict[str, Any] | None:
+        """Return a serializable snapshot of document.activeElement."""
+        self._ensure_initialized()
+        payload = await self.client.call_tool(
+            "get_active_element_info",
+            {
+                "include_ax": include_ax,
+                "include_page_screenshot": include_page_screenshot,
+                "include_element_screenshot": include_element_screenshot,
+                "screenshot_margin": screenshot_margin,
+                "html_max_length": html_max_length,
+            },
+        )
+        if not isinstance(payload, dict):
+            return None
+        if payload.get("page_url"):
+            self._current_url = str(payload["page_url"])
+        return payload
 
     async def close_session(self) -> None:
-        """Close page/context/browser/playwright and clear local references."""
+        """Close the executor browser session and transport."""
         try:
-            if self.page is not None:
-                try:
-                    await self.page.close()
-                except Exception:
-                    pass
-
-            if self.context is not None:
-                try:
-                    await self.context.close()
-                except Exception:
-                    pass
-
-            if self.browser is not None:
-                try:
-                    await self.browser.close()
-                except Exception:
-                    pass
-
-            if self.playwright is not None:
-                try:
-                    await self.playwright.stop()
-                except Exception:
-                    pass
+            if self.is_initialized():
+                await self.client.call_tool("close_session", {})
         finally:
-            self.page = None
-            self.context = None
-            self.browser = None
-            self.playwright = None
+            self._initialized = False
+            self._current_url = ""
+            await self.client.close()
 
-    def _rebind_page_from_browser(self) -> bool:
-        """Try to rebind to an existing open page from browser contexts."""
-        if self.context is not None and self.context in self.browser.contexts:
-            if self.context.pages:
-                self.page = self.context.pages[0]
-                return True
+    async def _refresh_current_url(self) -> None:
+        self._current_url = await self._read_current_url(default=self._current_url)
 
-        for context in self.browser.contexts:
-            if context.pages:
-                self.context = context
-                self.page = context.pages[0]
-                return True
+    async def _read_current_url(self, default: str = "") -> str:
+        try:
+            metadata = await self.get_page_metadata()
+            url = metadata.get("page_url") or metadata.get("url") or default
+            self._current_url = str(url or "")
+            return self._current_url
+        except Exception:
+            logger.debug("Unable to refresh current URL from executor metadata", exc_info=True)
+            return default
 
-        return False
+    def _ensure_initialized(self) -> None:
+        if not self.is_initialized():
+            raise RuntimeError("Browser executor session not initialized")
 
 
 BROWSER_SESSION = BrowserSession()

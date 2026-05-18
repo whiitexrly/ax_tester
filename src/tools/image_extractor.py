@@ -188,7 +188,7 @@ class ImageExtractor(Tool):
 
     async def execute(self, **kwargs) -> ToolResult:
         """Extract images from the current page in `BROWSER_SESSION`."""
-        page_url = BROWSER_SESSION.page.url if BROWSER_SESSION.is_initialized() else ""
+        page_url = await BROWSER_SESSION.get_current_url() if BROWSER_SESSION.is_initialized() else ""
         logger.info(f"Extracting images from current page {page_url}")
 
         try:
@@ -217,8 +217,9 @@ class ImageExtractor(Tool):
                 "Browser session not initialized. Initialize and navigate with root tools before extracting images."
             )
 
-        page = BROWSER_SESSION.page
-        raw = await page.evaluate(JS_COLLECT)
+        raw = await BROWSER_SESSION.evaluate(JS_COLLECT)
+        if not isinstance(raw, list):
+            raise ToolExecutionError("Image Extractor evaluate returned a non-list payload")
 
         out = []
         for item in raw:
@@ -261,7 +262,7 @@ class ImageExtractor(Tool):
             dedup[key] = x
 
         return {
-            "page_url": page.url,
+            "page_url": await BROWSER_SESSION.get_current_url(),
             "images": list(dedup.values()),
         }
 

@@ -11,10 +11,7 @@ WCAG rules targeted: [2.4.3, 2.4.7, 1.3.3, 2.4.4, 2.4.6, 2.1.1, 2.1.2, 3.2.1, 4.
 """
 
 import logging
-import re
 from typing import Any
-
-from playwright.async_api import CDPSession, ElementHandle, Page
 
 from tools.base import (
     ActiveElementInfo,
@@ -26,8 +23,6 @@ from tools.base import (
 )
 from tools.consumers import BaseConsumer, build_default_navigator_consumers
 from utils.browser_session import BROWSER_SESSION, NavigationCommand
-from utils.cdp_helper import get_ax_info_cdp, get_backend_dom_node_id
-from utils.screenshots import get_element_screenshot, get_page_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +40,7 @@ class RuntimeNavigatorTool(Tool):
 
     async def execute(self, **kwargs) -> ToolResult:
         """Execute runtime navigation on the current page in `BROWSER_SESSION`."""
-        page_url = BROWSER_SESSION.page.url if BROWSER_SESSION.is_initialized() else ""
+        page_url = await BROWSER_SESSION.get_current_url() if BROWSER_SESSION.is_initialized() else ""
         logger.info(f"Starting runtime navigation on current page {page_url}")
 
         try:
@@ -93,21 +88,16 @@ class RuntimeNavigatorTool(Tool):
                     "Browser session not initialized. Initialize and navigate with root tools before runtime navigation."
                 )
 
-            await BROWSER_SESSION.page.wait_for_timeout(initial_wait_ms)
-
-            page: Page = BROWSER_SESSION.page
-            cdp: CDPSession = await page.context.new_cdp_session(page)
+            await BROWSER_SESSION.wait_ms(initial_wait_ms)
 
             # build default states before recursive function
             self.seen_expandable = set()
-            start_element = await self._capture_active_element(page, cdp)
+            start_element = await self._capture_active_element()
             if not start_element:
                 raise ToolExecutionError("No active element detected after initial load.")
             self.initial_element_out_html = start_element.element_out_html
 
             await self._navigate_recursive_subtree(
-                page=page,
-                cdp=cdp,
                 max_steps=max_steps,
                 tab_delay_ms=tab_delay_ms,
                 expand_delay_ms=expand_delay_ms,
@@ -121,21 +111,21 @@ class RuntimeNavigatorTool(Tool):
             )
 
             return {
-                "page_url": page.url,
+                "page_url": await BROWSER_SESSION.get_current_url(),
                 "consumer_results": self._finalize_consumers(),
             }
 
         except ToolExecutionError:
             raise
         except Exception as e:
-            current_url = BROWSER_SESSION.page.url if BROWSER_SESSION.is_initialized() else "<unknown>"
-            logger.exception(f"Playwright execution error for {current_url}")
-            raise ToolExecutionError(f"Playwright error: {e!s}") from e
+            current_url = (
+                await BROWSER_SESSION.get_current_url() if BROWSER_SESSION.is_initialized() else "<unknown>"
+            )
+            logger.exception(f"Browser executor error for {current_url}")
+            raise ToolExecutionError(f"Browser executor error: {e!s}") from e
 
     async def _navigate_recursive_subtree(
         self,
-        page: Page,
-        cdp: CDPSession,
         max_steps: int,
         tab_delay_ms: int,
         expand_delay_ms: int,
@@ -151,7 +141,9 @@ class RuntimeNavigatorTool(Tool):
             cur_active_element=prev_state.cur_active_element,
         )
 
-        cur_active_element = await self._capture_active_element(page, cdp)
+        cur_active_element = await self._capture_active_element()
+        if not cur_active_element:
+            return
 
         cur_focus_key = cur_active_element.get_focus_key()
         for _step in range(1, max_steps + 1):
@@ -170,7 +162,9 @@ class RuntimeNavigatorTool(Tool):
 
                 # get new stop key
                 await BROWSER_SESSION.press_key(NavigationCommand.TAB, tab_delay_ms, expand_delay_ms)
-                nxt_active_element = await self._capture_active_element(page, cdp)
+                nxt_active_element = await self._capture_active_element()
+                if not nxt_active_element:
+                    return
                 nxt_stop_key = nxt_active_element.get_focus_key()
                 await BROWSER_SESSION.press_key(NavigationCommand.SHIFT_TAB, tab_delay_ms, expand_delay_ms)
 
@@ -178,8 +172,6 @@ class RuntimeNavigatorTool(Tool):
                 new_root_focus_key = cur_active_element.get_focus_key()
                 await self._press_key(NavigationCommand.SPACE, path, tab_delay_ms, expand_delay_ms)
                 await self._navigate_recursive_subtree(
-                    page=page,
-                    cdp=cdp,
                     max_steps=max_steps,
                     tab_delay_ms=tab_delay_ms,
                     expand_delay_ms=expand_delay_ms,
@@ -192,7 +184,9 @@ class RuntimeNavigatorTool(Tool):
 
             # try to move on, if it's not a stop
             await self._press_key(NavigationCommand.TAB, path, tab_delay_ms, expand_delay_ms)
-            cur_active_element = await self._capture_active_element(page, cdp)
+            cur_active_element = await self._capture_active_element()
+            if not cur_active_element:
+                return
             cur_focus_key = cur_active_element.get_focus_key()
 
             if cur_active_element.element_out_html == self.initial_element_out_html:
@@ -207,44 +201,35 @@ class RuntimeNavigatorTool(Tool):
                         path=path,
                         root_element=state.root_element,
                         prv_active_element=state.cur_active_element,
-                        cur_active_element=await self._capture_active_element(page, cdp),
+                        cur_active_element=await self._capture_active_element(),
                     ),
                     root_focus_key=kwargs.get("root_focus_key"),
                 )
                 return
 
-    async def _capture_active_element(self, page: Page, cdp: CDPSession) -> ActiveElementInfo | None:
-        handle = await page.evaluate_handle("() => document.activeElement")
-        element: ElementHandle = handle.as_element()
-        if not element:
-            await handle.dispose()
+    async def _capture_active_element(self) -> ActiveElementInfo | None:
+        payload = await BROWSER_SESSION.get_active_element_info(
+            include_ax=True,
+            include_page_screenshot=True,
+            include_element_screenshot=True,
+            screenshot_margin=50,
+            html_max_length=400,
+        )
+        if not payload:
             return None
 
-        try:
-            outer_html = await element.evaluate("el => el.outerHTML")
-            outer_html = re.sub(r"\s+", " ", outer_html).strip()[:400]
-            tag = await element.evaluate("el => el.tagName")
-            href = await element.evaluate("el => el.getAttribute('href')")
-
-            backend_dom_node_id = await get_backend_dom_node_id(cdp, element)
-            ax_info = await get_ax_info_cdp(cdp, element)
-            element_screenshot = await get_element_screenshot(page, element)
-            page_screenshot = await get_page_screenshot(page)
-
-            return ActiveElementInfo(
-                backend_dom_node_id=backend_dom_node_id,
-                page_screenshot=page_screenshot,
-                element_screenshot=element_screenshot,
-                element_ax_info=ax_info,
-                element_out_html=outer_html,
-                element_html_tag=tag,
-                element_href=href,
-                page_url=page.url,
-                page_title=await page.title(),
-                context_page_count=len(page.context.pages),
-            )
-        finally:
-            await element.dispose()
+        return ActiveElementInfo(
+            backend_dom_node_id=payload.get("backend_dom_node_id"),
+            page_screenshot=payload.get("page_screenshot"),
+            element_screenshot=payload.get("element_screenshot"),
+            element_ax_info=payload.get("element_ax_info"),
+            element_out_html=payload.get("element_out_html"),
+            element_html_tag=payload.get("element_html_tag"),
+            element_href=payload.get("element_href"),
+            page_url=payload.get("page_url"),
+            page_title=payload.get("page_title"),
+            context_page_count=payload.get("context_page_count"),
+        )
 
     def _consume_state(self, state: NavigatorState, **kwargs) -> None:
         """Dispatch state to registered consumers."""

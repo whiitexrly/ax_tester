@@ -22,6 +22,9 @@ class ContextKey(StrEnum):
     ON_FOCUS_REPORT = "on_focus_report"
     NO_KEYBOARD_TRAP_REPORT = "no_keyboard_trap_report"
 
+    # saved artifacts
+    REPORT_ARTIFACT = "report_artifact"
+
 
 FINAL_REPORT_KEYS: tuple[ContextKey, ...] = (
     ContextKey.STATIC_REPORT,

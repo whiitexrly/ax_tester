@@ -100,7 +100,7 @@ class AxeCoreTool(Tool):
 
         except Exception as e:
             logger.exception("Unexpected error in axe-core execution on current page")
-            page_url = BROWSER_SESSION.page.url if BROWSER_SESSION.is_initialized() else ""
+            page_url = await BROWSER_SESSION.get_current_url() if BROWSER_SESSION.is_initialized() else ""
             return ToolResult(
                 tool_name="axe-core",
                 status=ToolStatus.FAILURE,
@@ -127,13 +127,14 @@ class AxeCoreTool(Tool):
                     "Browser session not initialized. Initialize and navigate with root tools before running axe-core."
                 )
 
-            page = BROWSER_SESSION.page
-            has_axe = await page.evaluate("typeof window.axe !== 'undefined'")
+            has_axe = await BROWSER_SESSION.evaluate("typeof window.axe !== 'undefined'")
             if not has_axe:
-                await page.add_script_tag(content=self.axe_source)
+                await BROWSER_SESSION.add_script(content=self.axe_source)
 
-            axe_results = await page.evaluate("() => axe.run(document)")
-            axe_results["url"] = page.url
+            axe_results = await BROWSER_SESSION.evaluate("() => axe.run(document)")
+            if not isinstance(axe_results, dict):
+                raise ToolExecutionError("axe-core returned a non-object payload")
+            axe_results["url"] = await BROWSER_SESSION.get_current_url()
 
             return axe_results
 
@@ -141,7 +142,9 @@ class AxeCoreTool(Tool):
             raise
 
         except Exception as e:
-            current_url = BROWSER_SESSION.page.url if BROWSER_SESSION.is_initialized() else "<unknown>"
+            current_url = (
+                await BROWSER_SESSION.get_current_url() if BROWSER_SESSION.is_initialized() else "<unknown>"
+            )
             logger.exception(f"Playwright execution error for {current_url}")
             raise ToolExecutionError(f"Playwright error: {e!s}") from e
 

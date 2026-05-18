@@ -14,3 +14,5 @@ debug_*.py
 agents.md
 report_whl.py
 client/result*.json
+.persist
+.codex

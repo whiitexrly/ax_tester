@@ -3,17 +3,24 @@ AI agent capable of testing the accessibility (also referred to as a11y or ax) o
 
 ## Browser Session (`BROWSER_SESSION`)
 
-The project uses a shared singleton session defined in [`src/utils/browser_session.py`](src/utils/browser_session.py):
-- one Playwright browser/context/page per run
-- one source of truth for the current page used by agents/tools
+The project uses a shared singleton facade defined in [`src/utils/browser_session.py`](src/utils/browser_session.py).
+The facade delegates all browser work to an external browser
+executor MCP server through [`src/utils/browser_executor_client.py`](src/utils/browser_executor_client.py).
+
+The executor MCP URL is read from `BROWSER_EXECUTOR_URL`
+
+The local agent keeps one source of truth for the current remote browser session:
+- one browser executor session per run
+- one current page used by agents/tools
 - centralized keyboard actions (`press_key`) and navigation (`goto`)
+- serializable active-element snapshots through `get_active_element_info`
 
 ### Runtime lifecycle
 
 1. The user sends a request to `RootAgent` (`adk web`) or through MCP.
 2. `RootAgent` calls `run_crawl_test(url, max_depth, max_pages, same_host_only)` once.
 3. `run_crawl_test` crawls pages with BFS and runs the full tester pipeline on each visited page.
-4. Each page saves reports in its own folder; at the end of the crawl, a run-level `results.json` is generated.
+4. Each page saves reports in its own folder; at the end of the crawl, run-level report artifacts are generated.
 
 ### Crawl Strategy
 
@@ -27,8 +34,10 @@ The root agent uses `run_crawl_test(url, max_depth, max_pages, same_host_only)` 
 
 ### MCP Entry Point
 
-The MCP server exposes a single tool:
-- `send_message(message)`: forwards the received user message to `RootAgent`.
+The MCP server exposes high-level tools:
+- `run_full_test(url, depth=0, max_pages=10)`: runs the crawl/test flow and returns the aggregate JSON report immediately
+- `get_report_file(report_id, file_type)`: returns a downloadable resource link for a saved run report
+- `reset_session()`: resets the ADK/browser session
 
 ### Results Folder Layout
 
@@ -37,13 +46,17 @@ Reports are saved under `ax_tester/results/<crawl_folder_name>/`:
 - inside it, one timestamp-based folder per analyzed page, with a numeric suffix if needed
 - inside each page folder: per-tool JSON reports + `ax_report.json` + Excel/PPT exports
 - in the crawl root: `results.json`, containing the list of all page-level `ax_report` objects found in the page folders
+- in the crawl root: aggregate `ax_report.json`, `ax_report.xlsx`, and `ax_report.pptx` for MCP retrieval
 
 ### Tool contract
 
-- Tools must reuse `BROWSER_SESSION.page` and must not create a new browser/context/page.
+- Tools must not access Playwright objects directly.
+- Tools must use the `BROWSER_SESSION` facade for browser operations.
 - Runtime tools must not navigate again to the same URL internally.
 - Runtime tools should not require `url` input when they operate on the current page.
 - Keyboard press timing logic is centralized in `BROWSER_SESSION.press_key`.
+- Active element capture must use the executor MCP `get_active_element_info` primitive rather than local
+  CDP or screenshot helpers.
 
 ## Unified Report Schema
 
@@ -162,8 +175,8 @@ The **Semantic Analysis Agent** checks whether images’ `alt` text is *semantic
 ```
 
 ## Navigator Agent
-The **Navigator Agent** performs runtime navigation using Playwright and emits a stream of `NavigatorState` snapshots. It follows a producer/consumer model:
-- **Producer (Navigator)**: walks focusable elements (Tab/Space), captures screenshots and AX info.
+The **Navigator Agent** performs runtime keyboard navigation through the browser executor MCP server and emits a stream of `NavigatorState` snapshots. It follows a producer/consumer model:
+- **Producer (Navigator)**: walks focusable elements (Tab/Space), requests serializable active-element snapshots from the executor, and captures screenshots and AX info through MCP primitives.
 - **Consumers**: analyze each state independently and emit WCAG issues. Each consumer specializes in one WCAG rule (or a small set of closely related ones).
 
 The default consumer set is centralized in:
@@ -172,7 +185,7 @@ The default consumer set is centralized in:
 ### High-level pipeline
 
 0. **Runtime Navigator Tool** 
-   - Navigates the page using keyboard.
+   - Navigates the remote page using keyboard MCP primitives.
    - Emits `NavigatorState` (prev/current focus context).
 
 1. **Focus Visible Consumer** (WCAG 2.4.7, Level AA)
@@ -228,19 +241,29 @@ The default consumer set is centralized in:
 ```
 
 ## Installation and Usage
-Install environment and dependencies: `cd` in `ax_tester` directory, then: 
+Install environment and dependencies: `cd` in `ax_tester` directory, then:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e .
 rm -rf src/ax_tester.egg-info/
-playwright install
-playwright install chrome
 npm i
 ```
 
-Create a `.env` file as suggested in [env.example](/.env.example). Moreover, you can use any LLM model just by providing the required `API_KEY` in `.env` file and changing the used model name in [model.py](/src/common/model.py).
+Create a `.env` file as suggested in [.env.example](.env.example):
+
+```env
+OPENAI_API_KEY=sk-...
+BROWSER_EXECUTOR_URL=http://127.0.0.1:8000/mcp
+```
+
+`BROWSER_EXECUTOR_URL` must point to the external browser executor MCP endpoint. `ax-tester` does not create
+or manage a local Playwright browser anymore; the executor is responsible for Chrome/Playwright and browser
+session lifecycle.
+
+You can use any LLM model by providing the required API key in `.env` and changing the model name in
+[src/common/model.py](src/common/model.py).
 
 To run the client agent, using the same terminal with source `.venv`:
 ```bash
@@ -249,6 +272,36 @@ adk web
 ```
 > [!NOTE]
 > `adk web` must be run from the parent directory of `ax_tester`.
+
+### MCP Server
+
+`ax-tester` can also run as an MCP server that exposes high-level tools only:
+
+- `run_full_test(url, depth=0, max_pages=10)`
+- `get_report_file(report_id, file_type)`
+- `reset_session()`
+
+`run_full_test` returns the compact aggregate JSON report immediately and includes a run-level `report_id`.
+Use `get_report_file` with `file_type` set to `json`, `powerpoint`, or `excel` to retrieve saved artifacts
+from `results/<report_id>/`. The `report_id` is the crawl folder name returned by `run_full_test`.
+The tool returns a downloadable MCP resource link; file content is served by
+the matching MCP resource URI.
+
+The high-level MCP server does not expose raw browser primitives. Browser primitives stay behind the internal
+`BROWSER_SESSION` facade and are called against the external executor MCP server.
+
+Run the server from the repository root:
+
+```bash
+.venv/bin/python mcp_server.py --host 127.0.0.1 --port 8080
+```
+
+Use a different port from the browser executor. For example, keep the browser executor at
+`http://127.0.0.1:8000/mcp` and expose `ax-tester` at `http://127.0.0.1:8080/mcp`.
+
+`reset_session()` closes the current executor browser session through `BROWSER_SESSION.close_session()` and
+opens a fresh ADK session id. Calls are serialized inside `RootAgentBridge` so two MCP requests do not share
+and mutate the same browser session concurrently.
 
 
 ## Code style
