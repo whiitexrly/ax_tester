@@ -60,25 +60,25 @@ class BrowserExecutorClient:
             if include_session_id and self.session_id and "session_id" not in tool_args:
                 tool_args["session_id"] = self.session_id
 
-            if name == "create_session":
+            if name == "create_session_web":
                 capability_result = await self._session.call_tool("executor.get_capabilities")
                 if capability_result.isError:
                     raise BrowserExecutorError(
                         f"Executor tool {name!r} failed: {self._result_to_text(capability_result)}"
                     )
 
-                # capability_payload = self._parse_result(capability_result)
-                # tool_args["capability_id"] = capability_payload["capabilities"][-1]["id"]
-                # tool_args["capability_name"] = capability_payload["capabilities"][-1]["name"]
-                tool_args["capability_id"] = "browser-chrome"
-                tool_args["capability_name"] = "chrome"
+                capability_payload = self._parse_result(capability_result)
+                tool_args["capability_id"] = capability_payload["capabilities"][-1]["id"]
+                tool_args["capability_name"] = capability_payload["capabilities"][-1]["name"]
+                # tool_args["capability_id"] = "browser-chrome"
+                # tool_args["capability_name"] = "chrome di Pasquale"
 
             result = await self._session.call_tool(f"executor.{name}", tool_args)
             if result.isError:
                 raise BrowserExecutorError(f"Executor tool {name!r} failed: {self._result_to_text(result)}")
 
             payload = self._parse_result(result)
-            if name == "create_session":
+            if name == "create_session_web":
                 self.session_id = payload.get("id")
             elif name == "close_session":
                 self.session_id = None

@@ -322,7 +322,27 @@ def report_excel_resource(report_id: str) -> bytes:
 async def run_full_test(
     url: str, depth: int = 0, max_pages: int = 10, same_host_only: bool = True, session_id: str | None = None
 ) -> mcp_types.CallToolResult:
-    """Run the crawl/test flow on a given URL."""
+    """Run the crawl/test flow using explicit tool arguments.
+
+    Parameters:
+        url: Required. Starting page URL to test. Pass the full URL, including
+            scheme, for example "https://example.com".
+        depth: Optional. Maximum crawl depth from `url`. Defaults to 0. If the
+            caller does not mention depth, clients may omit this argument or
+            pass depth=0 explicitly; both mean the default crawl depth.
+        max_pages: Optional. Maximum number of pages to test. Defaults to 10.
+            If the caller does not mention a page limit, clients may omit this
+            argument or pass max_pages=10 explicitly.
+        same_host_only: Optional. Whether to restrict crawling to the same host
+            as `url`. Defaults to True. If the caller does not mention this
+            option, clients may omit it or pass same_host_only=True explicitly.
+        session_id: Optional. Reserved for compatibility; currently ignored by
+            this tool implementation.
+
+    Only `url` is required. Optional arguments should be supplied only when the
+    caller wants to override the documented defaults, although MCP clients may
+    still include default-valued arguments in the tool call.
+    """
     prompt = (
         f"Run the accessibility crawl/test flow on {url} and start immediately without additional confirmations. "
         f"Call run_crawl_test with max_depth={depth}, max_pages={max_pages}, same_host_only={same_host_only}"
@@ -334,7 +354,16 @@ async def run_full_test(
 
 @mcp.tool(structured_output=False)
 async def get_report_file(report_id: str, file_type: ReportFileType) -> mcp_types.CallToolResult:
-    """Retrieve a saved report file by timestamp report id and report file type."""
+    """Retrieve a saved report file using explicit tool arguments.
+
+    Parameters:
+        report_id: Required. Report identifier returned by `run_full_test`.
+        file_type: Required. File format to retrieve. Must be exactly one of
+            "json", "powerpoint", or "excel".
+
+    This tool has no optional arguments or defaults; both parameters must be
+    provided by the caller.
+    """
     try:
         content, metadata = _report_link_content(
             report_id,
@@ -357,7 +386,12 @@ async def get_report_file(report_id: str, file_type: ReportFileType) -> mcp_type
 
 @mcp.tool()
 async def reset_session() -> dict[str, Any]:
-    """Reset ADK session and close browser if open."""
+    """Reset the ADK/browser session.
+
+    Parameters:
+        None. This tool takes no arguments. MCP clients should call it with an
+        empty argument object.
+    """
     return await bridge.reset()
 
 
