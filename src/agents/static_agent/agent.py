@@ -7,6 +7,7 @@ from google.adk.agents.parallel_agent import ParallelAgent
 from google.adk.tools.tool_context import ToolContext
 
 from agents.static_agent.axe_core_agent import axe_agent
+from agents.static_agent.axe_enrichment_agent import axe_enrichment_agent
 from agents.static_agent.init_agent import init_agent
 from agents.static_agent.llm_finder_agent import loop_agent
 from common import MODEL, ContextKey
@@ -32,6 +33,11 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
 
     axe_report_json = json.dumps(axe_issue_list, ensure_ascii=True)
     loop_report_json = json.dumps(loop_report, ensure_ascii=True)
+    loop_issue_count = len(loop_report.get("issue_list", [])) if isinstance(loop_report, dict) else 0
+    logger.info(
+        f"Preparing MergeReportsAgent prompt: "
+        f"axe_issues={len(axe_issue_list)}, loop_issues={loop_issue_count}, page={page_url}"
+    )
 
     return (
         f"""
@@ -62,7 +68,11 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
         - issue_list: final deduplicated issue list
           Each issue must include:
           id, wcag_rule, description, severity, source, confidence, html_snippet, fix, image_url_or_path
+          why_this_matters, potential_exposures
           (set image_url_or_path to null when unknown)
+          - why_this_matters: one concise, plain-language sentence about the user impact
+          - potential_exposures: list of objects with category and description strings
+            Keep category short and keep description to one concise sentence.
         - total_issues: number of unique issues
         - page: analyzed page URL
         - score_passed: object {level_A, level_AA, level_AAA}
@@ -81,11 +91,17 @@ def get_merge_agent_instruction(tool_context: ToolContext) -> str:
     )
 
 
+axe_enriched_agent = SequentialAgent(
+    name="AxeCoreWithEnrichmentAgent",
+    sub_agents=[axe_agent, axe_enrichment_agent],
+    description="Run axe-core and enrich its issues with qualitative fields.",
+)
+
 axe_llm_agent = ParallelAgent(
     name="AxeAndLLMAgent",
-    sub_agents=[axe_agent, loop_agent],
+    sub_agents=[axe_enriched_agent, loop_agent],
     description=(
-        "Run axe-core and the LLM loop audit. Wait for both to complete, then return a brief confirmation."
+        "Run enriched axe-core analysis and the LLM loop audit. Wait for both to complete, then return a brief confirmation."
     ),
 )
 

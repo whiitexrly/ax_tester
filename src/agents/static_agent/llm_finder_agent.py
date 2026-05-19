@@ -1,5 +1,7 @@
+import logging
 from typing import Any
 
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.loop_agent import LoopAgent
 from google.adk.tools.tool_context import ToolContext
@@ -7,12 +9,18 @@ from google.adk.tools.tool_context import ToolContext
 from common import MODEL, ContextKey
 from schemas import IssueList
 
+logger = logging.getLogger(__name__)
+
 
 def get_finder_instruction(tool_context: ToolContext) -> str:
     html = tool_context.state.get(ContextKey.DOM_HTML, "")
     report = tool_context.state.get(ContextKey.LOOP_REPORT, '{"issue_list": []}')
     wcag_prompt = tool_context.state.get(ContextKey.WCAG_PROMPT, "")
     checker_feedback = tool_context.state.get(ContextKey.LOOP_NOTES, "")
+    logger.info(
+        f"Preparing LoopFinderAgent prompt: html_chars={len(str(html))}, "
+        f"wcag_prompt_chars={len(str(wcag_prompt))}, has_checker_feedback={bool(checker_feedback)}",
+    )
 
     return (
         f"""
@@ -46,9 +54,12 @@ def get_finder_instruction(tool_context: ToolContext) -> str:
         Return ONLY JSON matching the output schema. No extra keys.
         Each issue must include:
         - id, wcag_rule, description, severity, source, confidence, html_snippet, fix, image_url_or_path
+        - why_this_matters: one concise, plain-language sentence about why the issue affects users
+        - potential_exposures: list of objects with category and description strings
         - Set image_url_or_path to null when not available.
         - wcag_rule must be one of the allowed values from schema; if unsure use "best-practice"
         - source must be 'llm'
+        - Keep exposure categories short; keep each exposure description to one concise sentence.
 
         Severity: critical (blocks functionality) | serious (major impairment) | moderate (inconvenience) | minor (best practice)
 
@@ -65,12 +76,11 @@ def get_checker_instruction(tool_context: ToolContext) -> str:
     html = tool_context.state.get(ContextKey.DOM_HTML, "")
     report = tool_context.state.get(ContextKey.LOOP_REPORT, '{"issue_list": []}')
     iteration = tool_context.state.get(ContextKey.LOOP_ITERATION, 0)
+    logger.info(f"Preparing LoopCompletenessAgent prompt: iteration={iteration}")
 
     return (
         f"""
         You are a COMPLETENESS CHECKER.
-
-        First of all run only once the tool `inc_loop_it`, then proceed.
 
         HTML to Analyze:
         {html}
@@ -78,7 +88,7 @@ def get_checker_instruction(tool_context: ToolContext) -> str:
         Report:
         {report}
 
-        Iteration (1-based): {iteration + 1}"""
+        Iteration (1-based): {iteration}"""
         + """
 
         SCOPE (target coverage: 85%)
@@ -110,11 +120,12 @@ def exit_loop(tool_context: ToolContext) -> dict[str, Any]:
     return {"status": "complete", "iteration": iteration}
 
 
-def inc_loop_it(tool_context: ToolContext) -> dict[str, Any]:
-    """Increase loop iteration in tool context, to stay updated"""
-    iteration = tool_context.state.get(ContextKey.LOOP_ITERATION, 0)
-    tool_context.state[ContextKey.LOOP_ITERATION] = iteration + 1
-    return {"status": "success", "iteration": iteration + 1}
+def increment_loop_iteration(callback_context: CallbackContext) -> None:
+    """Increment the loop iteration before the checker builds its prompt."""
+    iteration = int(callback_context.state.get(ContextKey.LOOP_ITERATION, 0) or 0)
+    callback_context.state[ContextKey.LOOP_ITERATION] = iteration + 1
+    logger.info(f"Incremented accessibility loop iteration to {iteration + 1}")
+    return None
 
 
 loop_finder_agent = LlmAgent(
@@ -129,8 +140,9 @@ loop_checker_agent = LlmAgent(
     name="LoopCompletenessAgent",
     model=MODEL,
     instruction=get_checker_instruction,
-    tools=[inc_loop_it, exit_loop],
+    tools=[exit_loop],
     output_key=ContextKey.LOOP_NOTES,
+    before_agent_callback=increment_loop_iteration,
 )
 
 loop_agent = LoopAgent(

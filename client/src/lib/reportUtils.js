@@ -39,6 +39,28 @@ function normalizeScoreInfo(score) {
   };
 }
 
+function normalizePotentialExposures(exposures) {
+  if (!Array.isArray(exposures)) {
+    return [];
+  }
+
+  return exposures
+    .map((exposure) => {
+      if (typeof exposure === "string") {
+        return {
+          category: ensureString(exposure),
+          description: "",
+        };
+      }
+
+      return {
+        category: ensureString(exposure?.category),
+        description: ensureString(exposure?.description),
+      };
+    })
+    .filter((exposure) => exposure.category || exposure.description);
+}
+
 function normalizeIssue(issue, page, idx) {
   return {
     id: ensureString(issue?.id, `${page}-${idx + 1}`),
@@ -50,6 +72,8 @@ function normalizeIssue(issue, page, idx) {
     html_snippet: ensureString(issue?.html_snippet),
     fix: ensureString(issue?.fix),
     image_url_or_path: typeof issue?.image_url_or_path === "string" ? issue.image_url_or_path : null,
+    why_this_matters: ensureString(issue?.why_this_matters),
+    potential_exposures: normalizePotentialExposures(issue?.potential_exposures),
     page,
   };
 }
@@ -129,6 +153,11 @@ function matchesSearch(issue, searchTerm) {
     issue.confidence,
     issue.fix,
     issue.html_snippet,
+    issue.why_this_matters,
+    ...(issue.potential_exposures ?? []).flatMap((exposure) => [
+      exposure.category,
+      exposure.description,
+    ]),
   ]
     .join(" ")
     .toLowerCase();

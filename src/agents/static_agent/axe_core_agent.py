@@ -1,8 +1,12 @@
+import logging
+
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import DUMMY_MODEL, ContextKey
 from tools import AxeCoreTool
+
+logger = logging.getLogger(__name__)
 
 
 async def run_axe_core(tool_context: ToolContext) -> dict:
@@ -15,6 +19,7 @@ async def run_axe_core(tool_context: ToolContext) -> dict:
         dict: A confirmation message indicating that axe-core has completed and where the report is stored in the agent state.
 
     """
+    logger.info("RunAxeAgent calling AxeCoreTool")
     result = (await AxeCoreTool().execute()).to_dict()
 
     tool_context.state[ContextKey.AXE_REPORT] = result

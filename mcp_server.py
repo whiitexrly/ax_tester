@@ -320,14 +320,14 @@ def report_excel_resource(report_id: str) -> bytes:
 # --- MCP TOOLS ---
 @mcp.tool(structured_output=False)
 async def run_full_test(
-    url: str, depth: int = 0, max_pages: int = 10, same_host_only: bool = True, session_id: str | None = None
+    url: str, max_depth: int = 0, max_pages: int = 10, same_host_only: bool = True, session_id: str | None = None
 ) -> mcp_types.CallToolResult:
     """Run the crawl/test flow using explicit tool arguments.
 
     Parameters:
         url: Required. Starting page URL to test. Pass the full URL, including
             scheme, for example "https://example.com".
-        depth: Optional. Maximum crawl depth from `url`. Defaults to 0. If the
+        max_depth: Optional. Maximum crawl depth from `url`. Defaults to 0. If the
             caller does not mention depth, clients may omit this argument or
             pass depth=0 explicitly; both mean the default crawl depth.
         max_pages: Optional. Maximum number of pages to test. Defaults to 10.
@@ -343,9 +343,10 @@ async def run_full_test(
     caller wants to override the documented defaults, although MCP clients may
     still include default-valued arguments in the tool call.
     """
+
     prompt = (
         f"Run the accessibility crawl/test flow on {url} and start immediately without additional confirmations. "
-        f"Call run_crawl_test with max_depth={depth}, max_pages={max_pages}, same_host_only={same_host_only}"
+        f"Call run_crawl_test with max_depth={max_depth}, max_pages={max_pages}, same_host_only={same_host_only}"
         f"{f', session_id={session_id}' if session_id is not None else ''}."
     )
     bridge_result = await bridge.run_turn(prompt, clear_report_artifact=True)

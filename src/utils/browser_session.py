@@ -6,7 +6,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 BROWSER_BACKEND_ENV = "AX_BROWSER_BACKEND"
-DEFAULT_BROWSER_BACKEND = "local"
+DEFAULT_BROWSER_BACKEND = "mcp"
 SUPPORTED_BROWSER_BACKENDS = {"local", "mcp"}
 
 

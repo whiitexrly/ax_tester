@@ -59,6 +59,8 @@ Return JSON ONLY as an array of objects with keys:
 - severity: one of critical, serious, moderate, minor
 - confidence: one of high, medium, low
 - fix: short remediation guidance
+- why_this_matters: plain-language sentence describing the user impact
+- potential_exposures: array of objects with category and description strings
 
 Example output:
 [
@@ -70,7 +72,14 @@ Example output:
     "reason_in_context": "",
     "severity": "moderate",
     "confidence": "high",
-    "fix": "Replace the link text with wording that identifies the destination or action."
+    "fix": "Replace the link text with wording that identifies the destination or action.",
+    "why_this_matters": "Users may not know where the link will take them before activating it.",
+    "potential_exposures": [
+      {
+        "category": "Navigation ambiguity",
+        "description": "Users may need to open the link before they can understand its purpose."
+      }
+    ]
   }
 ]
 """
@@ -255,9 +264,21 @@ class LinkPurposeConsumer(BaseConsumer):
                     "severity": severity,
                     "confidence": confidence,
                     "fix": str(item.get("fix") or "").strip(),
+                    "why_this_matters": str(item.get("why_this_matters") or "").strip(),
+                    "potential_exposures": self._normalize_potential_exposures(item.get("potential_exposures")),
                 }
             )
         return decisions
+
+    def _normalize_potential_exposures(self, value: Any) -> list[dict[str, str]]:
+        exposures: list[dict[str, str]] = []
+        for exposure in value if isinstance(value, list) else []:
+            if isinstance(exposure, dict):
+                category = str(exposure.get("category") or "").strip()
+                description = str(exposure.get("description") or "").strip()
+                if category and description:
+                    exposures.append({"category": category, "description": description})
+        return exposures
 
     def _build_issues(
         self, items: list[dict[str, Any]], decisions: list[dict[str, Any]]
@@ -275,6 +296,20 @@ class LinkPurposeConsumer(BaseConsumer):
             fix = decision.get("fix") or "Use link text that clearly identifies the destination or action."
             severity = decision.get("severity") or "moderate"
             confidence = decision.get("confidence") or "medium"
+            why_this_matters = (
+                decision.get("why_this_matters")
+                or "Users may not understand where this link will take them before activating it."
+            )
+            potential_exposures = decision.get("potential_exposures") or [
+                {
+                    "category": "Navigation ambiguity",
+                    "description": "Users may need to open the link before they can understand its purpose.",
+                },
+                {
+                    "category": "User impact",
+                    "description": "Screen reader and keyboard users may have more difficulty choosing the right link.",
+                },
+            ]
 
             # 2.4.9 - Link Purpose (Link Only) (Level AAA)
             if decision.get("fail_link_only"):
@@ -290,6 +325,8 @@ class LinkPurposeConsumer(BaseConsumer):
                         html_snippet=html_snippet,
                         fix=fix,
                         image_url_or_path=None,
+                        why_this_matters=why_this_matters,
+                        potential_exposures=potential_exposures,
                     ).model_dump()
                 )
 
@@ -310,6 +347,8 @@ class LinkPurposeConsumer(BaseConsumer):
                         html_snippet=html_snippet,
                         fix=fix,
                         image_url_or_path=None,
+                        why_this_matters=why_this_matters,
+                        potential_exposures=potential_exposures,
                     ).model_dump()
                 )
 

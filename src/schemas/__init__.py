@@ -1,6 +1,7 @@
 from schemas.issues import (
     Issue,
     IssueList,
+    PotentialExposure,
     Report,
     ScoreInfo,
 )
@@ -8,6 +9,7 @@ from schemas.issues import (
 __all__ = [
     "Issue",
     "IssueList",
+    "PotentialExposure",
     "Report",
     "ScoreInfo",
 ]

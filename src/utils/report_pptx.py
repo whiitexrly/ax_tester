@@ -50,6 +50,10 @@ OUTCOME_NOT_COMPLIANT = "Not Compliant"
 OUTCOME_ORANGE = (245, 124, 0)
 ISSUE_IMAGE_DOWNLOAD_TIMEOUT = 4
 ISSUE_IMAGE_MAX_BYTES = 5_000_000
+HTML_SNIPPET_MAX_CHARS = 500
+WHY_IT_MATTERS_MAX_CHARS = 260
+POTENTIAL_EXPOSURES_MAX_CHARS = 420
+FIX_MAX_CHARS = 340
 
 
 def build_pptx_report(results_dir: str) -> str:
@@ -390,8 +394,12 @@ def _add_issue_slide(
     wcag_rule = _display_wcag_rule(str(issue.get("wcag_rule", "N/A")))
     description = _normalize_text(issue.get("description"), fallback="N/A")
     source = _normalize_text(issue.get("source"), fallback="N/A")
-    snippet = _truncate(_normalize_text(issue.get("html_snippet"), fallback="N/A"), 1600)
-    fix = _truncate(_normalize_text(issue.get("fix"), fallback="N/A"), 450)
+    why_it_matters = _truncate(
+        _normalize_text(issue.get("why_this_matters"), fallback="N/A"), WHY_IT_MATTERS_MAX_CHARS
+    )
+    potential_exposures = _format_potential_exposures(issue.get("potential_exposures"))
+    snippet = _truncate(_normalize_text(issue.get("html_snippet"), fallback="N/A"), HTML_SNIPPET_MAX_CHARS)
+    fix = _truncate(_normalize_text(issue.get("fix"), fallback="N/A"), FIX_MAX_CHARS)
     issue_image_source = _get_issue_image_source(issue)
     issue_image_bytes = _get_issue_image_bytes(issue_image_source, issue_image_cache)
 
@@ -405,7 +413,7 @@ def _add_issue_slide(
     title_paragraph.font.name = TITLE_FONT_NAME
     title_paragraph.font.color.rgb = _to_rgb(rgb_color, REPLY_GREEN)
 
-    meta_shape = slide.shapes.add_textbox(inches(0.4), inches(0.85), inches(9.2), inches(2.2))
+    meta_shape = slide.shapes.add_textbox(inches(0.4), inches(0.85), inches(9.2), inches(2.05))
     meta_frame = meta_shape.text_frame
     meta_frame.clear()
     meta_frame.word_wrap = True
@@ -415,18 +423,19 @@ def _add_issue_slide(
         ("WCAG rule", wcag_rule),
         ("Description", description),
         ("Source", source),
+        ("Why it matters", why_it_matters),
     ]
     for idx, (label, value) in enumerate(meta_lines):
         paragraph = meta_frame.paragraphs[0] if idx == 0 else meta_frame.add_paragraph()
-        _set_label_value_paragraph(paragraph, label, value, pt, 13)
+        _set_label_value_paragraph(paragraph, label, value, pt, 12)
 
     snippet_left = inches(0.4)
-    snippet_top = inches(3.4)
-    snippet_height = inches(1.8)
+    snippet_top = inches(2.5)
+    snippet_height = inches(2.00)
     snippet_width = inches(9.2) if issue_image_bytes is None else inches(5.9)
     snippet_label_width = snippet_width
 
-    snippet_label_shape = slide.shapes.add_textbox(inches(0.4), inches(3.1), snippet_label_width, inches(0.3))
+    snippet_label_shape = slide.shapes.add_textbox(inches(0.4), inches(2.93), snippet_label_width, inches(0.3))
     snippet_label_frame = snippet_label_shape.text_frame
     snippet_label_frame.clear()
     snippet_label_paragraph = snippet_label_frame.paragraphs[0]
@@ -445,16 +454,16 @@ def _add_issue_slide(
     snippet_frame.vertical_anchor = mso_anchor.TOP
     snippet_paragraph = snippet_frame.paragraphs[0]
     snippet_paragraph.text = snippet
-    snippet_paragraph.font.size = _scaled_pt(pt, 10)
+    snippet_paragraph.font.size = _scaled_pt(pt, 9)
     snippet_paragraph.font.name = SNIPPET_FONT_NAME
 
     if issue_image_bytes is not None:
         image_left = inches(6.45)
-        image_top = inches(3.4)
+        image_top = inches(2.5)
         image_width = inches(3.15)
-        image_height = inches(1.8)
+        image_height = inches(2.00)
 
-        image_label_shape = slide.shapes.add_textbox(image_left, inches(3.1), image_width, inches(0.3))
+        image_label_shape = slide.shapes.add_textbox(image_left, inches(2.93), image_width, inches(0.3))
         image_label_frame = image_label_shape.text_frame
         image_label_frame.clear()
         image_label_paragraph = image_label_frame.paragraphs[0]
@@ -469,7 +478,7 @@ def _add_issue_slide(
         image_box.line.color.rgb = rgb_color(189, 195, 199)
         _add_centered_image_to_box(slide, issue_image_bytes, image_left, image_top, image_width, image_height)
 
-    fix_label_shape = slide.shapes.add_textbox(inches(0.4), inches(5.35), inches(9.2), inches(0.3))
+    fix_label_shape = slide.shapes.add_textbox(inches(0.4), inches(4.9), inches(4.45), inches(0.3))
     fix_label_frame = fix_label_shape.text_frame
     fix_label_frame.clear()
     fix_label_paragraph = fix_label_frame.paragraphs[0]
@@ -478,15 +487,34 @@ def _add_issue_slide(
     fix_label_paragraph.font.bold = True
     fix_label_paragraph.font.name = BODY_FONT_NAME
 
-    fix_shape = slide.shapes.add_textbox(inches(0.4), inches(5.65), inches(9.2), inches(1.5))
+    fix_shape = slide.shapes.add_textbox(inches(0.4), inches(5.2), inches(4.45), inches(1.85))
     fix_frame = fix_shape.text_frame
     fix_frame.clear()
     fix_frame.word_wrap = True
     fix_frame.auto_size = mso_auto_size.TEXT_TO_FIT_SHAPE
     fix_paragraph = fix_frame.paragraphs[0]
     fix_paragraph.text = fix
-    fix_paragraph.font.size = _scaled_pt(pt, 13)
+    fix_paragraph.font.size = _scaled_pt(pt, 11)
     fix_paragraph.font.name = BODY_FONT_NAME
+
+    exposure_label_shape = slide.shapes.add_textbox(inches(5.05), inches(4.9), inches(4.55), inches(0.3))
+    exposure_label_frame = exposure_label_shape.text_frame
+    exposure_label_frame.clear()
+    exposure_label_paragraph = exposure_label_frame.paragraphs[0]
+    exposure_label_paragraph.text = "Potential exposures"
+    exposure_label_paragraph.font.size = _scaled_pt(pt, 13)
+    exposure_label_paragraph.font.bold = True
+    exposure_label_paragraph.font.name = BODY_FONT_NAME
+
+    exposure_shape = slide.shapes.add_textbox(inches(5.05), inches(5.2), inches(4.55), inches(1.85))
+    exposure_frame = exposure_shape.text_frame
+    exposure_frame.clear()
+    exposure_frame.word_wrap = True
+    exposure_frame.auto_size = mso_auto_size.TEXT_TO_FIT_SHAPE
+    exposure_paragraph = exposure_frame.paragraphs[0]
+    exposure_paragraph.text = potential_exposures
+    exposure_paragraph.font.size = _scaled_pt(pt, 11)
+    exposure_paragraph.font.name = BODY_FONT_NAME
 
 
 def _get_a_aa_wcag_rules() -> list[str]:
@@ -504,6 +532,24 @@ def _normalize_text(value: object, fallback: str) -> str:
         return fallback
     text = str(value).strip()
     return text if text else fallback
+
+
+def _format_potential_exposures(value: object) -> str:
+    exposure_lines: list[str] = []
+    for exposure in value if isinstance(value, list) else []:
+        if not isinstance(exposure, dict):
+            continue
+
+        category = str(exposure.get("category") or "").strip()
+        description = str(exposure.get("description") or "").strip()
+        if category and description:
+            exposure_lines.append(f"- {category}: {description}")
+        elif description:
+            exposure_lines.append(f"- {description}")
+
+    if not exposure_lines:
+        return "N/A"
+    return _truncate("\n".join(exposure_lines), POTENTIAL_EXPOSURES_MAX_CHARS)
 
 
 def _truncate(text: str, max_chars: int) -> str:
@@ -774,5 +820,5 @@ def _add_template_fallback_text(slide: Any, title_text: str, rgb_color: Any, inc
 
 
 if __name__ == "__main__":
-    results_dir = "/home/pbianco/ax_tester/results/2026-03-10_17-06-43"
+    results_dir = "/home/pbianco/ax_tester/results/2026-05-18_15-54-29_shop.reply.com/2026-05-18_15-58-56"
     build_pptx_report(results_dir)

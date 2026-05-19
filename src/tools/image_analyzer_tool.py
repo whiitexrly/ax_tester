@@ -110,6 +110,19 @@ class ImageAnalyzerTool(Tool):
                         source="llm/image-analyzer",
                         fix=f"Improve alt text, e.g. {img.get('caption')}",
                         image_url_or_path=img.get("url"),
+                        why_this_matters=(
+                            "Screen reader users may miss the purpose of this image or receive misleading information."
+                        ),
+                        potential_exposures=[
+                            {
+                                "category": "User impact",
+                                "description": "Non-visual users may not get the same information as sighted users.",
+                            },
+                            {
+                                "category": "Content accuracy",
+                                "description": "The page may communicate incomplete or incorrect meaning through assistive technology.",
+                            },
+                        ],
                     ).model_dump()
                     issue_list.append(issue)
 

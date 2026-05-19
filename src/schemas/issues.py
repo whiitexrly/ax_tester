@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SeverityKey = Literal["critical", "serious", "moderate", "minor"]
 SourceType = Literal[
@@ -97,6 +97,13 @@ WcagRule = Literal[
 ]
 
 
+class PotentialExposure(BaseModel):
+    model_config = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
+
+    category: str = Field(...)
+    description: str = Field(...)
+
+
 class Issue(BaseModel):
     model_config = ConfigDict(extra="forbid", json_schema_extra={"additionalProperties": False})
 
@@ -109,6 +116,17 @@ class Issue(BaseModel):
     html_snippet: str = Field(...)
     fix: str = Field(...)
     image_url_or_path: str | None = Field(...)
+    why_this_matters: str = Field(...)
+    potential_exposures: list[PotentialExposure] = Field(...)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_legacy_qualitative_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            data.setdefault("why_this_matters", "")
+            data.setdefault("potential_exposures", [])
+            data.setdefault("image_url_or_path", None)
+        return data
 
 
 class IssueList(BaseModel):

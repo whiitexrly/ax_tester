@@ -215,8 +215,6 @@ async def run_crawl_test(
             node_result["error"] = f"test_execution_error: {exc}"
             continue
 
-        logger.info(f"{queue=}")
-
     results_file, saved_reports, report_artifact = write_run_results_index(crawl_folder_name)
     tool_context.state[ContextKey.REPORT_ARTIFACT] = report_artifact
 

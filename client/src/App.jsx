@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import rawReports from "../results.json";
+import rawReports from "../results_shopreply_aug.json";
 import FilterBar from "./components/FilterBar";
 import Header from "./components/Header";
 import IssuesTable from "./components/IssuesTable";

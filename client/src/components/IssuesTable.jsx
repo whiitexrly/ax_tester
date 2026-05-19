@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { SEVERITY_META, truncateText } from "../lib/reportUtils";
 
 const ITEMS_PER_PAGE = 10;
+const VIEW_MODES = {
+  QUALITATIVE: "qualitative",
+  TECHNICAL: "technical",
+};
 
 function SortIcon({ direction }) {
   if (direction === "asc") {
@@ -32,11 +36,59 @@ function SortIcon({ direction }) {
   );
 }
 
+function compactWcagRule(rule) {
+  const normalized = String(rule || "").trim();
+  if (!normalized || normalized === "best-practice") {
+    return "Best practice";
+  }
+
+  const ruleId = normalized.match(/^(\d+\.\d+\.\d+)/)?.[1];
+  const level = normalized.match(/\(Level (A{1,3})\)/)?.[1];
+  return [ruleId, level].filter(Boolean).join(" ") || normalized;
+}
+
+function getIssueKey(issue) {
+  return `${issue.page}-${issue.id}`;
+}
+
+function PotentialExposuresCell({ exposures, expanded, onToggle }) {
+  if (!exposures.length) {
+    return <span className="empty-cell">-</span>;
+  }
+
+  const visibleExposures = expanded ? exposures : exposures.slice(0, 2);
+  const hiddenCount = Math.max(0, exposures.length - 2);
+
+  return (
+    <div className="exposure-list">
+      {visibleExposures.map((exposure, index) => (
+        <div className="exposure-item" key={`${exposure.category}-${index}`}>
+          {exposure.category ? <strong className="exposure-category">{exposure.category}</strong> : null}
+          {exposure.description ? <span className="exposure-description">{exposure.description}</span> : null}
+        </div>
+      ))}
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          className="exposure-toggle"
+          onClick={onToggle}
+          aria-expanded={expanded}
+        >
+          {expanded ? "Show less" : `+${hiddenCount} more`}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function IssuesTable({ rows, searchTerm, onSearchChange }) {
   const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState(VIEW_MODES.QUALITATIVE);
+  const [expandedExposureRows, setExpandedExposureRows] = useState(() => new Set());
 
   const getSortDirection = (key) => (sortConfig.key === key ? sortConfig.direction : null);
+  const isQualitativeView = viewMode === VIEW_MODES.QUALITATIVE;
 
   const sortedRows = useMemo(() => {
     if (!sortConfig.key || !sortConfig.direction) {
@@ -84,6 +136,13 @@ function IssuesTable({ rows, searchTerm, onSearchChange }) {
     });
   };
 
+  const handleViewModeChange = (nextViewMode) => {
+    setViewMode(nextViewMode);
+    if (nextViewMode === VIEW_MODES.QUALITATIVE && sortConfig.key && sortConfig.key !== "severity") {
+      setSortConfig({ key: null, direction: null });
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / ITEMS_PER_PAGE));
   const pagedRows = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -125,6 +184,18 @@ function IssuesTable({ rows, searchTerm, onSearchChange }) {
     setCurrentPage(page);
   };
 
+  const handleExposureToggle = (issueKey) => {
+    setExpandedExposureRows((current) => {
+      const next = new Set(current);
+      if (next.has(issueKey)) {
+        next.delete(issueKey);
+      } else {
+        next.add(issueKey);
+      }
+      return next;
+    });
+  };
+
   return (
     <section className="panel table-panel" aria-label="Issue details">
       <div className="table-header">
@@ -132,15 +203,35 @@ function IssuesTable({ rows, searchTerm, onSearchChange }) {
           <h2>Issue Details</h2>
           <p>{rows.length} results found</p>
         </div>
-        <div className="field-group table-search">
-          <label htmlFor="issue-search-table">Issue Search</label>
-          <input
-            id="issue-search-table"
-            type="search"
-            value={searchTerm}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Search by description, WCAG rule, snippet..."
-          />
+        <div className="table-actions">
+          <div className="table-view-toggle" role="group" aria-label="Issue table view">
+            <button
+              type="button"
+              className={`table-view-button ${isQualitativeView ? "is-active" : ""}`}
+              onClick={() => handleViewModeChange(VIEW_MODES.QUALITATIVE)}
+              aria-pressed={isQualitativeView}
+            >
+              Qualitative
+            </button>
+            <button
+              type="button"
+              className={`table-view-button ${!isQualitativeView ? "is-active" : ""}`}
+              onClick={() => handleViewModeChange(VIEW_MODES.TECHNICAL)}
+              aria-pressed={!isQualitativeView}
+            >
+              Technical
+            </button>
+          </div>
+          <div className="field-group table-search">
+            <label htmlFor="issue-search-table">Issue Search</label>
+            <input
+              id="issue-search-table"
+              type="search"
+              value={searchTerm}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Search by issue, WCAG rule, exposure..."
+            />
+          </div>
         </div>
       </div>
 
@@ -151,80 +242,143 @@ function IssuesTable({ rows, searchTerm, onSearchChange }) {
         </div>
       ) : (
         <>
-          <div className="table-wrap">
+          <div className={`table-wrap table-wrap-${viewMode}`}>
             <table>
-              <thead>
-                <tr>
-                  <th>Issue</th>
-                  <th
-                    aria-sort={
-                      getSortDirection("severity") === "asc"
-                        ? "ascending"
-                        : getSortDirection("severity") === "desc"
-                          ? "descending"
-                          : "none"
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="table-sort-button"
-                      onClick={() => handleSortToggle("severity")}
+              {isQualitativeView ? (
+                <thead>
+                  <tr>
+                    <th>Issue</th>
+                    <th
+                      aria-sort={
+                        getSortDirection("severity") === "asc"
+                          ? "ascending"
+                          : getSortDirection("severity") === "desc"
+                            ? "descending"
+                            : "none"
+                      }
                     >
-                      Severity
-                      <span className="table-sort-arrow" aria-hidden="true">
-                        <SortIcon direction={getSortDirection("severity")} />
-                      </span>
-                    </button>
-                  </th>
-                  <th
-                    aria-sort={
-                      getSortDirection("wcag_rule") === "asc"
-                        ? "ascending"
-                        : getSortDirection("wcag_rule") === "desc"
-                          ? "descending"
-                          : "none"
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="table-sort-button"
-                      onClick={() => handleSortToggle("wcag_rule")}
+                      <button
+                        type="button"
+                        className="table-sort-button"
+                        onClick={() => handleSortToggle("severity")}
+                      >
+                        Severity
+                        <span className="table-sort-arrow" aria-hidden="true">
+                          <SortIcon direction={getSortDirection("severity")} />
+                        </span>
+                      </button>
+                    </th>
+                    <th>Why This Matters</th>
+                    <th>Potential Exposures</th>
+                    <th>Recommended Action</th>
+                  </tr>
+                </thead>
+              ) : (
+                <thead>
+                  <tr>
+                    <th>Issue</th>
+                    <th
+                      aria-sort={
+                        getSortDirection("severity") === "asc"
+                          ? "ascending"
+                          : getSortDirection("severity") === "desc"
+                            ? "descending"
+                            : "none"
+                      }
                     >
-                      WCAG Rule
-                      <span className="table-sort-arrow" aria-hidden="true">
-                        <SortIcon direction={getSortDirection("wcag_rule")} />
-                      </span>
-                    </button>
-                  </th>
-                  <th
-                    aria-sort={
-                      getSortDirection("page") === "asc"
-                        ? "ascending"
-                        : getSortDirection("page") === "desc"
-                          ? "descending"
-                          : "none"
-                    }
-                  >
-                    <button type="button" className="table-sort-button" onClick={() => handleSortToggle("page")}>
-                      Page
-                      <span className="table-sort-arrow" aria-hidden="true">
-                        <SortIcon direction={getSortDirection("page")} />
-                      </span>
-                    </button>
-                  </th>
-                  <th>Element</th>
-                  <th>Suggested Fix</th>
-                </tr>
-              </thead>
+                      <button
+                        type="button"
+                        className="table-sort-button"
+                        onClick={() => handleSortToggle("severity")}
+                      >
+                        Severity
+                        <span className="table-sort-arrow" aria-hidden="true">
+                          <SortIcon direction={getSortDirection("severity")} />
+                        </span>
+                      </button>
+                    </th>
+                    <th
+                      aria-sort={
+                        getSortDirection("wcag_rule") === "asc"
+                          ? "ascending"
+                          : getSortDirection("wcag_rule") === "desc"
+                            ? "descending"
+                            : "none"
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="table-sort-button"
+                        onClick={() => handleSortToggle("wcag_rule")}
+                      >
+                        WCAG Rule
+                        <span className="table-sort-arrow" aria-hidden="true">
+                          <SortIcon direction={getSortDirection("wcag_rule")} />
+                        </span>
+                      </button>
+                    </th>
+                    <th
+                      aria-sort={
+                        getSortDirection("page") === "asc"
+                          ? "ascending"
+                          : getSortDirection("page") === "desc"
+                            ? "descending"
+                            : "none"
+                      }
+                    >
+                      <button type="button" className="table-sort-button" onClick={() => handleSortToggle("page")}>
+                        Page
+                        <span className="table-sort-arrow" aria-hidden="true">
+                          <SortIcon direction={getSortDirection("page")} />
+                        </span>
+                      </button>
+                    </th>
+                    <th>Element</th>
+                    <th>Suggested Fix</th>
+                  </tr>
+                </thead>
+              )}
               <tbody>
                 {pagedRows.map((issue) => {
+                  const issueKey = getIssueKey(issue);
                   const imageLink =
                     typeof issue.image_url_or_path === "string" && issue.image_url_or_path.trim().length > 0
                       ? issue.image_url_or_path.trim()
                       : null;
 
+                  if (isQualitativeView) {
+                    return (
+                      <tr key={issueKey}>
+                        <td>
+                          <strong>{issue.description}</strong>
+                          <div className="issue-meta-row">
+                            <span className="wcag-compact">{compactWcagRule(issue.wcag_rule)}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`severity-pill severity-${issue.severity}`}>
+                            {SEVERITY_META[issue.severity]?.label ?? issue.severity}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="why-cell">
+                            <span className="plain-cell">{issue.why_this_matters || "-"}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <PotentialExposuresCell
+                            exposures={issue.potential_exposures ?? []}
+                            expanded={expandedExposureRows.has(issueKey)}
+                            onToggle={() => handleExposureToggle(issueKey)}
+                          />
+                        </td>
+                        <td>{truncateText(issue.fix || "-", 160)}</td>
+                      </tr>
+                    );
+                  }
+
                   return (
-                    <tr key={`${issue.page}-${issue.id}`}>
+                    <tr key={issueKey}>
                       <td>
                         <strong>{issue.description}</strong>
                         <span className="sub-cell">SOURCE: {issue.source}</span>

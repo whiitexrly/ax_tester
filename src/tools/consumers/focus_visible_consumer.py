@@ -232,6 +232,15 @@ class FocusVisibleConsumer(BaseConsumer):
                     source="llm/focus_visible_analyzer",
                     fix="Ensure all focused interactive elements display a clear, visible focus outline or border.",
                     image_url_or_path=None,
+                    why_this_matters=(
+                        "Keyboard users may lose track of where they are on the page and abandon the flow."
+                    ),
+                    potential_exposures=[
+                        {
+                            "category": "User impact",
+                            "description": "People navigating by keyboard may not know which control is currently active.",
+                        },
+                    ],
                 ).model_dump()
                 issues.append(issue)
         return issues

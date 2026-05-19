@@ -12,6 +12,7 @@ ISSUE_COLUMNS = [
     "wcag_rule",
     "level",
     "description",
+    "why it matters",
     "source",
     "html_snippet",
     "fix",
@@ -47,6 +48,7 @@ def _build_all_issues_df(all_issues: list[dict[str, Any]]) -> pd.DataFrame:
         return pd.DataFrame(columns=ISSUE_COLUMNS)
 
     df["level"] = df.get("wcag_rule").apply(get_wcag_level)
+    df["why it matters"] = df.get("why_this_matters")
     for column in ISSUE_COLUMNS:
         if column not in df.columns:
             df[column] = None
@@ -164,5 +166,5 @@ def _extract_issue_list(report: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 if __name__ == "__main__":
-    results_dir = "/home/pbianco/ax_tester/results/2026-03-04_16-12-05"
+    results_dir = "/home/pbianco/ax_tester/results/2026-05-18_15-54-29_shop.reply.com/2026-05-18_15-58-56"
     build_excel_report(results_dir)

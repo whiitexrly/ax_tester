@@ -85,6 +85,19 @@ class OnFocusConsumer(BaseConsumer):
                 html_snippet=current.element_out_html or "",
                 fix="Remove side effects from focus handlers and require explicit activation (Enter/Space/click).",
                 image_url_or_path=None,
+                why_this_matters=(
+                    "Keyboard and screen reader users may be disoriented when focus triggers a context change."
+                ),
+                potential_exposures=[
+                    {
+                        "category": "Navigation disruption",
+                        "description": "Users may be moved to a new tab or context before they choose an action.",
+                    },
+                    {
+                        "category": "User impact",
+                        "description": "Unexpected changes can make the page harder to understand and recover from.",
+                    },
+                ],
             ).model_dump()
 
         # url change from focus alone is unexpected context change
@@ -99,6 +112,19 @@ class OnFocusConsumer(BaseConsumer):
                 html_snippet=current.element_out_html or "",
                 fix="Do not trigger navigation on focus; trigger changes only after explicit user action.",
                 image_url_or_path=None,
+                why_this_matters=(
+                    "Keyboard and screen reader users may be disoriented when focus triggers a context change."
+                ),
+                potential_exposures=[
+                    {
+                        "category": "Navigation disruption",
+                        "description": "Users may be taken to a different URL before intentionally activating the control.",
+                    },
+                    {
+                        "category": "User impact",
+                        "description": "Unexpected navigation can make the page harder to understand and recover from.",
+                    },
+                ],
             ).model_dump()
 
         # title jump may indicate large in-page context switch
@@ -113,6 +139,19 @@ class OnFocusConsumer(BaseConsumer):
                 html_snippet=current.element_out_html or "",
                 fix="Avoid context changes on focus; update content only after explicit confirmation.",
                 image_url_or_path=None,
+                why_this_matters=(
+                    "Keyboard and screen reader users may be disoriented when focus triggers a context change."
+                ),
+                potential_exposures=[
+                    {
+                        "category": "User impact",
+                        "description": "Unexpected content changes can interrupt orientation and task completion.",
+                    },
+                    {
+                        "category": "Predictability risk",
+                        "description": "The interface may behave differently from what keyboard users expect.",
+                    },
+                ],
             ).model_dump()
 
         return None
@@ -138,6 +177,19 @@ class OnFocusConsumer(BaseConsumer):
                 html_snippet=current.element_out_html or "",
                 fix="Keep focus on the control that expanded content; do not move focus automatically on Space.",
                 image_url_or_path=None,
+                why_this_matters=(
+                    "Keyboard users may lose their position when expanding content moves focus unexpectedly."
+                ),
+                potential_exposures=[
+                    {
+                        "category": "User impact",
+                        "description": "Users may need to rediscover where they are before continuing the task.",
+                    },
+                    {
+                        "category": "Flow disruption",
+                        "description": "Unexpected focus movement can interrupt forms, menus, or expandable content.",
+                    },
+                ],
             ).model_dump()
 
         if transition_key == NavigationCommand.ESCAPE:
@@ -151,6 +203,19 @@ class OnFocusConsumer(BaseConsumer):
                 html_snippet=current.element_out_html or "",
                 fix="On Escape, restore focus to the control that opened the expandable region/dialog.",
                 image_url_or_path=None,
+                why_this_matters=(
+                    "Keyboard users may lose their return point after closing or leaving expanded content."
+                ),
+                potential_exposures=[
+                    {
+                        "category": "User impact",
+                        "description": "Users may need extra navigation to find the control they were using.",
+                    },
+                    {
+                        "category": "Flow disruption",
+                        "description": "Escape may not restore a predictable path back to the original interaction.",
+                    },
+                ],
             ).model_dump()
 
         return None

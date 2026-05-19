@@ -125,6 +125,13 @@ class NoKeyboardTrapConsumer(BaseConsumer):
             html_snippet=current.element_out_html or previous.element_out_html or "",
             fix="Ensure Escape closes the active modal/dialog and returns keyboard users to the underlying page context.",
             image_url_or_path=None,
+            why_this_matters="Keyboard users may be stuck inside a modal and unable to continue or leave the flow.",
+            potential_exposures=[
+                {
+                    "category": "User blocked",
+                    "description": "People using only the keyboard may be unable to close the dialog or continue.",
+                },
+            ],
         ).model_dump()
 
     def _build_llm_messages(

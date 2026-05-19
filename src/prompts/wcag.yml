@@ -1,6 +1,8 @@
 wcag_version: "2.2"
 output_requirements:
-  - "For each issue: id, wcag_rule, description, severity, source, confidence, html_snippet, fix."
+  - "For each issue: id, wcag_rule, description, severity, source, confidence, html_snippet, fix, why_this_matters, potential_exposures."
+  - "why_this_matters must be one concise, plain-language sentence about why the issue affects users."
+  - "potential_exposures must be a list of objects with category and description strings; keep categories short and descriptions concise."
   - "Do not include extra keys beyond the required schema."
   - "Do not report criteria from other levels than the one requested."
   - "If not applicable: skip and do not output an issue."

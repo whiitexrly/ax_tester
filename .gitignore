@@ -16,3 +16,4 @@ report_whl.py
 client/result*.json
 .persist
 .codex
+client/dist/
