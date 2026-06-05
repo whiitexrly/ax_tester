@@ -5,8 +5,6 @@ import mimetypes
 from typing import Any
 from urllib.request import Request, urlopen
 
-import cairosvg
-
 from common import MODEL_NAME
 from tools.base import Tool, ToolExecutionError, ToolResult, ToolStatus
 from utils.llm_helper import call_llm
@@ -132,7 +130,7 @@ class ImageCaptioner(Tool):
 
         mime = self._resolve_mime(url, content_type)
         if mime == "image/svg+xml" or url.lower().endswith(".svg"):
-            data = self._convert_svg_to_png(data)
+            data = self._convert_svg_to_png(data, url)
             mime = "image/png"
         return data, mime
 
@@ -142,10 +140,18 @@ class ImageCaptioner(Tool):
         guessed, _ = mimetypes.guess_type(url)
         return guessed or "application/octet-stream"
 
-    def _convert_svg_to_png(self, data: bytes) -> bytes:
+    def _convert_svg_to_png(self, data: bytes, url: str) -> bytes:
         try:
+            import cairosvg
+
             return cairosvg.svg2png(bytestring=data)
+        except (ImportError, OSError) as e:
+            logger.warning(
+                f"Skipping SVG image because CairoSVG or its native dependencies are unavailable: {url} ({e})"
+            )
+            raise ToolExecutionError("svg_to_png_unavailable") from e
         except Exception as e:
+            logger.warning(f"Skipping SVG image because SVG conversion failed: {url} ({e})")
             raise ToolExecutionError(f"svg_to_png_failed:{e}") from e
 
     def _batch_images(

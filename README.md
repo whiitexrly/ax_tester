@@ -4,13 +4,17 @@ AI agent capable of testing the accessibility (also referred to as a11y or ax) o
 ## Browser Session (`BROWSER_SESSION`)
 
 The project uses a shared singleton facade defined in [`src/utils/browser_session.py`](src/utils/browser_session.py).
-The facade delegates all browser work to an external browser
-executor MCP server through [`src/utils/browser_executor_client.py`](src/utils/browser_executor_client.py).
+The facade keeps browser operations behind one interface and can use either a local Playwright-backed Chrome
+session or an external browser executor MCP server.
 
-The executor MCP URL is read from `BROWSER_EXECUTOR_URL`
+The backend is selected with `AXTESTER_EXECUTOR`:
+- `local`: runs Chrome locally through Playwright via [`src/utils/browser_executor_client_local.py`](src/utils/browser_executor_client_local.py)
+- `mcp`: delegates browser work to an external browser executor MCP server via [`src/utils/browser_executor_client.py`](src/utils/browser_executor_client.py)
 
-The local agent keeps one source of truth for the current remote browser session:
-- one browser executor session per run
+When `AXTESTER_EXECUTOR=mcp`, the executor MCP URL is read from `BROWSER_EXECUTOR_URL`.
+
+The local agent keeps one source of truth for the current browser session:
+- one browser session per run
 - one current page used by agents/tools
 - centralized keyboard actions (`press_key`) and navigation (`goto`)
 - serializable active-element snapshots through `get_active_element_info`
@@ -55,8 +59,8 @@ Reports are saved under `ax_tester/results/<crawl_folder_name>/`:
 - Runtime tools must not navigate again to the same URL internally.
 - Runtime tools should not require `url` input when they operate on the current page.
 - Keyboard press timing logic is centralized in `BROWSER_SESSION.press_key`.
-- Active element capture must use the executor MCP `get_active_element_info` primitive rather than local
-  CDP or screenshot helpers.
+- Active element capture must use `BROWSER_SESSION.get_active_element_info`; the selected backend decides whether
+  the snapshot comes from local Playwright/CDP or from the executor MCP primitive.
 
 ## Unified Report Schema
 
@@ -246,21 +250,29 @@ Install environment and dependencies: `cd` in `ax_tester` directory, then:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python3 -m pip install -e .
+python -m pip install -e .
 rm -rf src/ax_tester.egg-info/
 npm i
+playwright install --with-deps chrome
 ```
 
 Create a `.env` file as suggested in [.env.example](.env.example):
 
 ```env
 OPENAI_API_KEY=sk-...
-BROWSER_EXECUTOR_URL=http://127.0.0.1:8000/mcp
+AXTESTER_EXECUTOR=local
+BROWSER_EXECUTOR_URL=
+CAPABILITY_POLICY=any
+CAPABILITY_ID=
+CAPABILITY_NAME=
 ```
 
-`BROWSER_EXECUTOR_URL` must point to the external browser executor MCP endpoint. `ax-tester` does not create
-or manage a local Playwright browser anymore; the executor is responsible for Chrome/Playwright and browser
-session lifecycle.
+Use `AXTESTER_EXECUTOR=local` for the default local Chrome/Playwright backend.
+
+Use `AXTESTER_EXECUTOR=mcp` when browser work should be delegated to an external browser executor MCP endpoint.
+In that mode, set `BROWSER_EXECUTOR_URL` to the executor URL, for example `http://127.0.0.1:8000/mcp`.
+`CAPABILITY_POLICY=any` uses the shared `browser-chrome` capability; `CAPABILITY_POLICY=personal` requires
+`CAPABILITY_ID` and `CAPABILITY_NAME`.
 
 You can use any LLM model by providing the required API key in `.env` and changing the model name in
 [src/common/model.py](src/common/model.py).
@@ -288,7 +300,7 @@ The tool returns a downloadable MCP resource link; file content is served by
 the matching MCP resource URI.
 
 The high-level MCP server does not expose raw browser primitives. Browser primitives stay behind the internal
-`BROWSER_SESSION` facade and are called against the external executor MCP server.
+`BROWSER_SESSION` facade and use the backend selected by `AXTESTER_EXECUTOR`.
 
 Run the server from the repository root:
 
@@ -296,12 +308,12 @@ Run the server from the repository root:
 .venv/bin/python mcp_server.py --host 127.0.0.1 --port 8080
 ```
 
-Use a different port from the browser executor. For example, keep the browser executor at
-`http://127.0.0.1:8000/mcp` and expose `ax-tester` at `http://127.0.0.1:8080/mcp`.
+When `AXTESTER_EXECUTOR=mcp`, use a different port from the browser executor. For example, keep the browser
+executor at `http://127.0.0.1:8000/mcp` and expose `ax-tester` at `http://127.0.0.1:8080/mcp`.
 
-`reset_session()` closes the current executor browser session through `BROWSER_SESSION.close_session()` and
-opens a fresh ADK session id. Calls are serialized inside `RootAgentBridge` so two MCP requests do not share
-and mutate the same browser session concurrently.
+`reset_session()` closes the current browser session through `BROWSER_SESSION.close_session()` and opens a fresh
+ADK session id. Calls are serialized inside `RootAgentBridge` so two MCP requests do not share and mutate the
+same browser session concurrently.
 
 
 ## Code style
@@ -315,3 +327,6 @@ or
 ```bash
 make format
 ```
+
+## Contributors
+made with ❤️ by [whiitex](https://github.com/whiitex) ♿

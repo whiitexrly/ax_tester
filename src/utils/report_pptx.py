@@ -4,6 +4,7 @@ This file is fully built in vibe-coding.
 """
 
 import json
+import logging
 import mimetypes
 import re
 from collections import Counter
@@ -20,6 +21,8 @@ from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
 from utils.wcag_helper import WCAG_RULE_MAPPER, get_wcag_level
+
+logger = logging.getLogger(__name__)
 
 ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
 TEMPLATES_DIR = ASSETS_DIR / "templates"
@@ -390,7 +393,6 @@ def _add_issue_slide(
 ) -> None:
     slide = prs.slides.add_slide(prs.slide_layouts[6])
 
-    issue_id = str(issue.get("id", f"issue-{issue_index}"))
     wcag_rule = _display_wcag_rule(str(issue.get("wcag_rule", "N/A")))
     description = _normalize_text(issue.get("description"), fallback="N/A")
     source = _normalize_text(issue.get("source"), fallback="N/A")
@@ -407,7 +409,7 @@ def _add_issue_slide(
     title_frame = title_shape.text_frame
     title_frame.clear()
     title_paragraph = title_frame.paragraphs[0]
-    title_paragraph.text = f"Issue {issue_index}/{issue_count}: {issue_id}"
+    title_paragraph.text = f"Issue {issue_index}/{issue_count}"
     title_paragraph.font.size = _scaled_pt(pt, 21)
     title_paragraph.font.bold = True
     title_paragraph.font.name = TITLE_FONT_NAME
@@ -718,6 +720,9 @@ def _get_issue_image_bytes(image_source: str | None, image_cache: dict[str, byte
 
         if mime == "image/svg+xml" or image_source.lower().endswith(".svg"):
             image_bytes = _convert_svg_to_png(image_bytes)
+            if image_bytes is None:
+                image_cache[image_source] = None
+                return None
         image_cache[image_source] = image_bytes
         return image_bytes
     except Exception:
@@ -748,10 +753,19 @@ def _resolve_image_mime(source: str, content_type: str) -> str:
     return guessed or "application/octet-stream"
 
 
-def _convert_svg_to_png(svg_bytes: bytes) -> bytes:
-    import cairosvg
+def _convert_svg_to_png(svg_bytes: bytes) -> bytes | None:
+    try:
+        import cairosvg
 
-    return cairosvg.svg2png(bytestring=svg_bytes)
+        return cairosvg.svg2png(bytestring=svg_bytes)
+    except (ImportError, OSError) as exc:
+        logger.warning(
+            f"Skipping SVG issue image because CairoSVG or its native dependencies are unavailable: {exc}"
+        )
+        return None
+    except Exception as exc:
+        logger.warning(f"Skipping SVG issue image because SVG conversion failed: {exc}")
+        return None
 
 
 def _add_centered_image_to_box(

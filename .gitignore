@@ -1,19 +1,36 @@
+# Python environments
 .venv/
 venv/
 env/
+
+# Local environment configuration
 .env
-node_modules/
-**/*.ipynb
-results/
-.adk
+
+# Python cache and packaging artifacts
 __pycache__/
 *.pyc
 *.egg-info/
 .ruff_cache
-debug_*.py
-agents.md
-report_whl.py
+
+# JavaScript dependencies and build output
+node_modules/
+client/dist/
+
+# Generated reports and local run output
+results/
 client/result*.json
+
+# Notebook and debug scratch files
+**/*.ipynb
+debug_*.py
+report_whl.py
+
+# Local tool state
+.adk
 .persist
 .codex
-client/dist/
+.claude
+.agents
+
+# Local notes
+agents.md

@@ -3,12 +3,14 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from openpyxl.chart import PieChart, Reference
+from openpyxl.chart.label import DataLabelList
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from utils.wcag_helper import WCAG_RULE_MAPPER, get_wcag_level
 
 ISSUE_COLUMNS = [
-    "id",
+    "url",
     "wcag_rule",
     "level",
     "description",
@@ -20,6 +22,15 @@ ISSUE_COLUMNS = [
 ]
 LEVEL_ORDER = {"A": 0, "AA": 1, "AAA": 2}
 REPORT_FILENAME = "ax_report.json"
+HEADER_ROW_HEIGHT = 24
+DATA_ROW_HEIGHT = 24
+WCAG_CHART_DATA_START_COL = 26
+POUR_PRINCIPLES = {
+    "1": "1 - Perceivable",
+    "2": "2 - Operable",
+    "3": "3 - Understandable",
+    "4": "4 - Robust",
+}
 
 
 def build_excel_report(results_dir: str) -> str:
@@ -27,7 +38,7 @@ def build_excel_report(results_dir: str) -> str:
         raise ValueError("results_dir not found in tool_context.state. Run save first.")
 
     report = _load_report(results_dir)
-    all_issues = _extract_issue_list(report)
+    all_issues = _load_issues_with_page_url(results_dir, report)
     all_issues_df = _build_all_issues_df(all_issues)
     wcag_summary_df = _build_wcag_summary(all_issues_df)
     level_summary_df = _build_level_summary(all_issues)
@@ -49,11 +60,12 @@ def _build_all_issues_df(all_issues: list[dict[str, Any]]) -> pd.DataFrame:
 
     df["level"] = df.get("wcag_rule").apply(get_wcag_level)
     df["why it matters"] = df.get("why_this_matters")
+    df["url"] = df.apply(_get_issue_url, axis=1)
     for column in ISSUE_COLUMNS:
         if column not in df.columns:
             df[column] = None
     df = df[ISSUE_COLUMNS]
-    return _sort_with_level(df, by=["wcag_rule", "source", "id"], ascending=[True, True, True])
+    return _sort_with_level(df, by=["wcag_rule", "source", "url"], ascending=[True, True, True])
 
 
 def _build_level_summary(all_issues: list[dict[str, Any]]) -> pd.DataFrame:
@@ -81,7 +93,7 @@ def _build_wcag_summary(all_issues_df: pd.DataFrame) -> pd.DataFrame:
         summary_df = baseline_df.assign(total_issues=0)
     else:
         observed_counts_df = (
-            all_issues_df.groupby("wcag_rule", dropna=False)["id"].count().reset_index(name="total_issues")
+            all_issues_df.groupby("wcag_rule", dropna=False).size().reset_index(name="total_issues")
         )
         summary_df = baseline_df.merge(observed_counts_df, on="wcag_rule", how="left")
         summary_df["total_issues"] = summary_df["total_issues"].fillna(0).astype(int)
@@ -118,10 +130,19 @@ def _level_order(level: object) -> int:
     return 3
 
 
+def _safe_int(value: object) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _format_workbook(writer: pd.ExcelWriter) -> None:
     workbook = writer.book
     header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
+    odd_row_fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+    even_row_fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
 
     workbook["Level Summary"].column_dimensions["A"].width = 40
 
@@ -134,11 +155,94 @@ def _format_workbook(writer: pd.ExcelWriter) -> None:
             cell.fill = header_fill
             cell.font = header_font
             cell.alignment = Alignment(vertical="center", horizontal="center")
+        ws.row_dimensions[1].height = HEADER_ROW_HEIGHT
+
+        for row_index, row in enumerate(ws.iter_rows(min_row=2), start=1):
+            row_fill = odd_row_fill if row_index % 2 else even_row_fill
+            ws.row_dimensions[row_index + 1].height = DATA_ROW_HEIGHT
+            for cell in row:
+                cell.fill = row_fill
+                cell.alignment = Alignment(vertical="center")
 
         for col_cells in ws.columns:
             col_letter = col_cells[0].column_letter
             max_len = max(len("" if cell.value is None else str(cell.value)) for cell in col_cells)
             ws.column_dimensions[col_letter].width = min(max(max_len + 2, 12), 70)
+
+        if sheet_name == "WCAG Summary":
+            _add_wcag_summary_chart(ws, header_fill, header_font, odd_row_fill, even_row_fill)
+
+
+def _add_wcag_summary_chart(
+    ws: Any,
+    header_fill: PatternFill,
+    header_font: Font,
+    odd_row_fill: PatternFill,
+    even_row_fill: PatternFill,
+) -> None:
+    headers = {cell.value: cell.column for cell in ws[1]}
+    wcag_rule_col = headers.get("wcag_rule")
+    total_issues_col = headers.get("total_issues")
+    if wcag_rule_col is None or total_issues_col is None:
+        return
+
+    issue_counts_by_principle = dict.fromkeys([*POUR_PRINCIPLES.values(), "Other"], 0)
+    for row_index in range(2, ws.max_row + 1):
+        wcag_rule = ws.cell(row=row_index, column=wcag_rule_col).value
+        total_issues = _safe_int(ws.cell(row=row_index, column=total_issues_col).value)
+        if not wcag_rule or total_issues <= 0:
+            continue
+        issue_counts_by_principle[_pour_principle_label(wcag_rule)] += total_issues
+
+    chart_rows = [(principle, count) for principle, count in issue_counts_by_principle.items() if count > 0]
+    if not chart_rows:
+        return
+
+    label_col = WCAG_CHART_DATA_START_COL
+    value_col = WCAG_CHART_DATA_START_COL + 1
+    ws.cell(row=1, column=label_col, value="POUR principle")
+    ws.cell(row=1, column=value_col, value="Total issues")
+    for cell in (ws.cell(row=1, column=label_col), ws.cell(row=1, column=value_col)):
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(vertical="center", horizontal="center")
+
+    for row_index, (principle, total_issues) in enumerate(chart_rows, start=2):
+        row_fill = odd_row_fill if row_index % 2 else even_row_fill
+        label_cell = ws.cell(row=row_index, column=label_col, value=principle)
+        value_cell = ws.cell(row=row_index, column=value_col, value=total_issues)
+        for cell in (label_cell, value_cell):
+            cell.fill = row_fill
+            cell.alignment = Alignment(vertical="center")
+
+    chart = PieChart()
+    chart.style = 10
+    chart.title = "Issues by POUR principle"
+    chart.height = 9
+    chart.width = 14
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showPercent = True
+    chart.dataLabels.showVal = True
+    chart.dataLabels.showLeaderLines = True
+
+    data = Reference(ws, min_col=value_col, min_row=1, max_row=len(chart_rows) + 1)
+    categories = Reference(ws, min_col=label_col, min_row=2, max_row=len(chart_rows) + 1)
+    chart.add_data(data, titles_from_data=True)
+    chart.set_categories(categories)
+    chart.visible_cells_only = False
+    ws.add_chart(chart, "E2")
+
+    # Keep source columns visible: Excel may render charts blank when their
+    # source range is hidden.
+    ws.column_dimensions["Z"].width = 45
+    ws.column_dimensions["AA"].width = 14
+
+
+def _pour_principle_label(wcag_rule: object) -> str:
+    rule = str(wcag_rule or "").strip()
+    if not rule:
+        return "Other"
+    return POUR_PRINCIPLES.get(rule[0], "Other")
 
 
 def _load_report(results_dir: str) -> dict[str, Any]:
@@ -151,6 +255,56 @@ def _load_report(results_dir: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError(f"Invalid report format in {report_path}: expected JSON object")
     return data
+
+
+def _load_issues_with_page_url(results_dir: str, report: dict[str, Any]) -> list[dict[str, Any]]:
+    results_path = _find_results_index(Path(results_dir))
+    if not results_path.exists():
+        return _extract_issue_list_with_page_url(report)
+
+    try:
+        with open(results_path, encoding="utf-8") as f:
+            reports = json.load(f)
+    except Exception:
+        return _extract_issue_list_with_page_url(report)
+
+    if not isinstance(reports, list):
+        return _extract_issue_list_with_page_url(report)
+
+    all_issues: list[dict[str, Any]] = []
+    for page_report in reports:
+        if not isinstance(page_report, dict):
+            continue
+        all_issues.extend(_extract_issue_list_with_page_url(page_report))
+    return all_issues
+
+
+def _find_results_index(results_dir: Path) -> Path:
+    for filename in ("results.json", "results_bpm.json"):
+        candidate = results_dir / filename
+        if candidate.exists():
+            return candidate
+    return results_dir / "results.json"
+
+
+def _extract_issue_list_with_page_url(report: dict[str, Any]) -> list[dict[str, Any]]:
+    page_url = str(report.get("page") or "").strip()
+    issues = []
+    for issue in _extract_issue_list(report):
+        issue_with_url = issue.copy()
+        if page_url and not _get_issue_url(issue_with_url):
+            issue_with_url["url"] = page_url
+        issues.append(issue_with_url)
+    return issues
+
+
+def _get_issue_url(issue: Any) -> str:
+    if hasattr(issue, "get"):
+        for key in ("url", "page", "page_url", "_report_page"):
+            value = str(issue.get(key) or "").strip()
+            if value:
+                return value
+    return ""
 
 
 def _extract_issue_list(report: dict[str, Any]) -> list[dict[str, Any]]:

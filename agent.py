@@ -4,10 +4,16 @@ This file exposes root_agent for ADK discovery while keeping the implementation
 inside src/agents.
 """
 
+# ruff: noqa: E402
+
 import logging
 from collections import deque
 from urllib.parse import urlparse
 from uuid import uuid4
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.sequential_agent import SequentialAgent

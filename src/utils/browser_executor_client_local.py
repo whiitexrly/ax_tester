@@ -2,7 +2,7 @@ import base64
 import logging
 import re
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from playwright.async_api import (
     Browser,
@@ -18,15 +18,8 @@ logger = logging.getLogger(__name__)
 
 _EMPTY_AX: dict[str, Any] = {"role": None, "name": None, "description": None, "properties": {}}
 
-
-class NavigationCommand(StrEnum):
-    """Command usable for navigation."""
-
-    TAB = "Tab"
-    SHIFT_TAB = "Shift+Tab"
-    SPACE = "Space"
-    ENTER = "Enter"
-    ESCAPE = "Escape"
+if TYPE_CHECKING:
+    from utils.browser_session import NavigationCommand
 
 
 async def release_remote_object(cdp: CDPSession, object_id: str | None) -> None:
@@ -226,7 +219,7 @@ class BrowserSessionLocal:
         self.session_id = session_id
         try:
             self._playwright = await async_playwright().start()
-            self._browser = await self._playwright.chromium.launch(headless=self.headless)
+            self._browser = await self._playwright.chromium.launch(channel="chrome", headless=self.headless)
             self._context = await self._browser.new_context()
             self._page = await self._context.new_page()
             await self._page.goto("about:blank", wait_until="domcontentloaded")
@@ -238,11 +231,11 @@ class BrowserSessionLocal:
             raise
 
     async def press_key(
-        self, key: NavigationCommand | str, tab_delay_ms: int = 50, expand_delay_ms: int = 1000
+        self, key: "NavigationCommand | str", tab_delay_ms: int = 50, expand_delay_ms: int = 1000
     ) -> None:
         """Press a keyboard key on the active local page and wait for UI updates."""
         page = self._get_page()
-        key_value = key.value if isinstance(key, NavigationCommand) else str(key)
+        key_value = key.value if isinstance(key, StrEnum) else str(key)
         await page.keyboard.press(key_value)
 
         delay_ms = tab_delay_ms if "Tab" in key_value else expand_delay_ms
@@ -431,7 +424,3 @@ class BrowserSessionLocal:
     def _ensure_initialized(self) -> None:
         if not self.is_initialized():
             raise RuntimeError("Local browser session not initialized")
-
-
-BROWSER_SESSION_LOCAL = BrowserSessionLocal()
-BROWSER_SESSION = BROWSER_SESSION_LOCAL

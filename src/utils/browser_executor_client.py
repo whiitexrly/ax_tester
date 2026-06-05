@@ -13,19 +13,24 @@ from mcp.shared._httpx_utils import create_mcp_http_client
 logger = logging.getLogger(__name__)
 
 BROWSER_EXECUTOR_URL_ENV = "BROWSER_EXECUTOR_URL"
+CAPABILITY_POLICY_ENV = "CAPABILITY_POLICY"
+CAPABILITY_ID_ENV = "CAPABILITY_ID"
+CAPABILITY_NAME_ENV = "CAPABILITY_NAME"
+ALLOWED_CAPABILITY_POLICY_VALUES = {"personal", "any"}
+DEFAULT_CAPABILITY_ID = "browser-chrome"
 
 
 class BrowserExecutorError(RuntimeError):
     """Raised when the browser executor MCP call fails."""
 
 
-def get_browser_executor_url() -> str:
-    """Read the browser executor MCP URL from env or the repo .env file."""
-    value = os.getenv(BROWSER_EXECUTOR_URL_ENV)
+def get_env_variable(env_var_name: str) -> str:
+    """Read a required setting from the process environment."""
+    value = os.getenv(env_var_name)
     if value:
         return value.strip()
 
-    raise BrowserExecutorError(f"Missing {BROWSER_EXECUTOR_URL_ENV}. Set it in the .env file.")
+    raise BrowserExecutorError(f"Missing {env_var_name}. Set it in the .env file.")
 
 
 class BrowserExecutorClient:
@@ -60,21 +65,44 @@ class BrowserExecutorClient:
             if include_session_id and self.session_id and "session_id" not in tool_args:
                 tool_args["session_id"] = self.session_id
 
+            # this is used only in taffy=local and executor=mcp
+            # normally, taffy manages to create session and share the session_id on its own
             if name == "create_session_web":
-                capability_result = await self._session.call_tool("executor.get_capabilities")
-                if capability_result.isError:
+                capability_policy = get_env_variable(CAPABILITY_POLICY_ENV).lower()
+                if capability_policy not in ALLOWED_CAPABILITY_POLICY_VALUES:
+                    allowed = ", ".join(sorted(ALLOWED_CAPABILITY_POLICY_VALUES))
                     raise BrowserExecutorError(
-                        f"Executor tool {name!r} failed: {self._result_to_text(capability_result)}"
+                        f"Invalid {CAPABILITY_POLICY_ENV}: {capability_policy!r}. Allowed values: {allowed}"
                     )
 
-                capability_payload = self._parse_result(capability_result)
-                tool_args["capability_id"] = capability_payload["capabilities"][-1]["id"]
-                tool_args["capability_name"] = capability_payload["capabilities"][-1]["name"]
-                # tool_args["capability_id"] = "browser-chrome"
-                # tool_args["capability_name"] = "chrome di Pasquale"
+                # run test on any available capability
+                if capability_policy == "any":
+                    capability_result = await self._session.call_tool("executor.get_capabilities")
+                    if capability_result.isError:
+                        capability_text_result = self._result_to_text(capability_result)
+                        logger.error("Executor tool %r failed: %s", name, capability_text_result)
+                        raise BrowserExecutorError(f"Executor tool {name!r} failed: {capability_text_result}")
 
+                    capability_payload = self._parse_result(capability_result)
+
+                    for capability in capability_payload.get("capabilities", []):
+                        if isinstance(capability, dict) and capability.get("id") == DEFAULT_CAPABILITY_ID:
+                            tool_args["capability_id"] = capability.get("id")
+                            tool_args["capability_name"] = capability.get("name")
+                            break
+                # run test on specified capability
+                elif capability_policy == "personal":
+                    tool_args["capability_id"] = get_env_variable(CAPABILITY_ID_ENV)
+                    tool_args["capability_name"] = get_env_variable(CAPABILITY_NAME_ENV)
+
+                logger.info(
+                    f"Capability - poilcy:{capability_policy}, id:{tool_args['capability_id']}, name:{tool_args['capability_name']}"
+                )
+
+            logger.debug("Calling MCP executor tool %r", name)
             result = await self._session.call_tool(f"executor.{name}", tool_args)
             if result.isError:
+                logger.error(self._result_to_text(result))
                 raise BrowserExecutorError(f"Executor tool {name!r} failed: {self._result_to_text(result)}")
 
             payload = self._parse_result(result)
@@ -94,7 +122,7 @@ class BrowserExecutorClient:
         if self._session is not None:
             return
 
-        url = get_browser_executor_url()
+        url = get_env_variable(BROWSER_EXECUTOR_URL_ENV)
         self._exit_stack = AsyncExitStack()
         try:
             http_client = create_mcp_http_client(

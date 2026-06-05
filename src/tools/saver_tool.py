@@ -149,6 +149,7 @@ def write_run_results_index(crawl_folder_name: str) -> tuple[Path, list[dict[str
 
 def run_save(tool_context: ToolContext) -> dict[str, object]:
     """Save current page reports into `<results>/<crawl_folder_name>/<page_folder>/`."""
+    logger.info("Saving reports")
 
     crawl_folder_name = str(tool_context.state.get(ContextKey.CRAWL_FOLDER_NAME, "")).strip()
     if not crawl_folder_name:

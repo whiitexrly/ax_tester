@@ -5,45 +5,39 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-BROWSER_BACKEND_ENV = "AX_BROWSER_BACKEND"
-DEFAULT_BROWSER_BACKEND = "mcp"
+AXTESTER_EXECUTOR_ENV = "AXTESTER_EXECUTOR"
+DEFAULT_AXTESTER_EXECUTOR = "mcp"
 SUPPORTED_BROWSER_BACKENDS = {"local", "mcp"}
+
+
+class NavigationCommand(StrEnum):
+    """Command usable for navigation."""
+
+    TAB = "Tab"
+    SHIFT_TAB = "Shift+Tab"
+    SPACE = "Space"
+    ENTER = "Enter"
+    ESCAPE = "Escape"
 
 
 def get_browser_backend() -> str:
     """Return the configured browser backend: `mcp` or `local`."""
-    value = os.getenv(BROWSER_BACKEND_ENV, DEFAULT_BROWSER_BACKEND)
+    value = os.getenv(AXTESTER_EXECUTOR_ENV, DEFAULT_AXTESTER_EXECUTOR)
     backend = value.strip().lower()
     if backend not in SUPPORTED_BROWSER_BACKENDS:
         supported = ", ".join(sorted(SUPPORTED_BROWSER_BACKENDS))
-        raise ValueError(f"{BROWSER_BACKEND_ENV} must be one of: {supported}")
+        raise ValueError(f"{AXTESTER_EXECUTOR_ENV} must be one of: {supported}")
 
     return backend
 
 
 BROWSER_BACKEND = get_browser_backend()
 
-
 if BROWSER_BACKEND == "local":
-    from utils.browser_session_client_local import (  # noqa: F401
-        BROWSER_SESSION_LOCAL,
-        BrowserSessionLocal,
-        NavigationCommand,
-    )
+    from utils.browser_executor_client_local import BrowserSessionLocal as BrowserSession
 
-    BrowserSession = BrowserSessionLocal
-    BROWSER_SESSION = BROWSER_SESSION_LOCAL
 else:
     from utils.browser_executor_client import BrowserExecutorClient
-
-    class NavigationCommand(StrEnum):
-        """Command usable for navigation."""
-
-        TAB = "Tab"
-        SHIFT_TAB = "Shift+Tab"
-        SPACE = "Space"
-        ENTER = "Enter"
-        ESCAPE = "Escape"
 
     class BrowserSession:
         """Facade over the external browser executor MCP server."""
@@ -72,7 +66,6 @@ else:
                 )
 
             self._initialized = True
-            await self._refresh_current_url()
 
         async def press_key(
             self, key: NavigationCommand | str, tab_delay_ms: int = 50, expand_delay_ms: int = 1000
@@ -201,4 +194,5 @@ else:
             if not self.is_initialized():
                 raise RuntimeError("Browser executor session not initialized")
 
-    BROWSER_SESSION = BrowserSession()
+
+BROWSER_SESSION = BrowserSession()

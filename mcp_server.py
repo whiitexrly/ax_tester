@@ -6,12 +6,18 @@ Tools exposed:
 - reset_session(): create a brand new ADK session and close browser session.
 """
 
+# ruff: noqa: E402
+
 import argparse
 import asyncio
 import base64
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
